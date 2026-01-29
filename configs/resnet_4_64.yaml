@@ -1,0 +1,9 @@
+model:
+  num_res_blocks: 4 
+  num_channels: 64        
+  input_planes: 9        
+  board_size: 5           
+  action_space_size: 1250
+  value_head_hidden: 64  
+  policy_head_hidden : 2 
+  dropout: 0.0
