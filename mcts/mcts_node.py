@@ -27,19 +27,13 @@ class MCTSNode:
         best_action = -1
         best_child = None
 
-        # Precompute sqrt of total visits for efficiency
         sqrt_total_visits = math.sqrt(self.visit_count)
 
         for action_idx, child in self.children.items():
-            # Q value (exploit)
-            q_value = child.value
+            q_value = -child.value
             
-            # U value (explore): c_puct * P(s,a) * (sqrt(N_parent) / (1 + N_child))
             u_value = c_puct * child.prior * (sqrt_total_visits / (1 + child.visit_count))
             
-            # Logic for unvisited nodes:
-            # If a node is unvisited, Q is 0. 
-            # The Prior determines order of exploration for unvisited nodes.
             
             score = q_value + u_value
 

@@ -210,3 +210,5 @@ env/
 .env/
 venv/
 .venv/
+
+models/

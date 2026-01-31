@@ -53,26 +53,17 @@ class OnitamaNet(nn.Module):
         self.value_fc2 = nn.Linear(self.val_hidden, 1) 
 
     def forward(self, x):
-        # 1. Backbone
         x = self.conv_input(x)
         x = self.res_tower(x)
 
-        # 2. Policy Head
         p = F.relu(self.policy_bn(self.policy_conv(x)))
         p = p.view(p.size(0), -1) 
-        p = self.policy_fc(p)
-        log_policy = F.log_softmax(p, dim=1) 
+        policy_logits = self.policy_fc(p)
 
-        # 3. Value Head
         v = F.relu(self.value_bn(self.value_conv(x)))
         v = v.view(v.size(0), -1) 
         v = F.relu(self.value_fc1(v))
         v = torch.tanh(self.value_fc2(v)) 
 
-        return log_policy, v
+        return policy_logits, v
 
-
-def load_model_from_config(yaml_path):
-    with open(yaml_path, 'r') as f:
-        config = yaml.safe_load(f)
-    return OnitamaNet(config)
