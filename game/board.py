@@ -30,6 +30,7 @@ class Board:
             self.opponent_cards  = cards[0:2]
 
         self.result              = 0
+        self.game_over           = False
 
         # Hashmap to store repetitions
         self.repetitions = {self.get_hash() : 1}
@@ -76,6 +77,7 @@ class Board:
         new_board.result             = self.result
 
         new_board.repetitions        = self.repetitions.copy()
+        new_board.game_over          = self.game_over
 
         return new_board
     
@@ -84,6 +86,9 @@ class Board:
     
     def get_turn(self):
         return self.turn
+    
+    def is_game_over(self):
+        return self.game_over
     
     def get_compact_board(self):
         """
@@ -114,7 +119,7 @@ class Board:
                 All legal moves with the format Move(from_idx, to_idx, card_slot).
         """
         moves = []
-        
+
         # All player pieces
         player_pieces = self.player_disciples | self.player_master
 
@@ -235,6 +240,7 @@ class Board:
 
         # Game over
         if count >= 3 or self.result == -1:
+            self.game_over = True
             return 1
         
         # Game continues

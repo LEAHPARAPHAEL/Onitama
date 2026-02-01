@@ -9,9 +9,9 @@ import os
 import yaml
 import random
 import math
-import re
 from network.model import OnitamaNet
 import json
+from tqdm import tqdm
 
 
 class OnitamaStreamingDataset(IterableDataset):
@@ -36,7 +36,7 @@ class OnitamaStreamingDataset(IterableDataset):
 
         for filepath in my_files:
             try:
-                data_chunk = torch.load(filepath)
+                data_chunk = torch.load(filepath, weights_only=False)
             except Exception as e:
                 print(f"Error loading {filepath}: {e}")
                 continue
@@ -48,33 +48,53 @@ class OnitamaStreamingDataset(IterableDataset):
 
                 yield (
                     nn_input, 
-                    torch.tensor(policy_target, dtype=torch.float32), 
+                    policy_target.clone().detach(),
                     torch.tensor(value_target, dtype=torch.float32)
                 )
             
             del data_chunk
 
+def extract_data_gen_idx(str : str):
+    try:
+        idx = int(str.strip("v").split(".")[0])
+        return idx
+    except:
+        return -1
 
-
+def extract_model_gen_idx(str : str):
+    try:
+        idx = int(str.strip("v").split(".")[0].split("_")[0])
+        return idx
+    except:
+        return -1
+    
+def extract_model_steps(str : str):
+    try:
+        idx = int(str.strip("v").split(".")[0].split("_")[-1])
+        return idx
+    except:
+        return -1
+    
 # data v0 is generated from a random model
 # model v0 trains on data v0
 # data v1 is generated from v0
 # model v1 trains on data v1
-def train(config):
+def train(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     config = yaml.safe_load(open(os.path.join("models", "configs", args.config), "r"))
 
     model_name = config["model"]["name"]
-    model_folder = os.path.join("models", "weights", model_name)
-    data_folder = os.path.join("models", "data", model_name)
-    logs_folder = os.path.join("models", "logs", model_name)
+    model_dir = os.path.join("models", "weights", model_name)
+    data_dir = os.path.join("models", "data", model_name)
+    log_file = os.path.join("models", "logs", f"{model_name}.json")
 
     os.makedirs("./models", exist_ok = True)
     os.makedirs("./models/configs", exist_ok = True)
-    os.makedirs(model_folder, exist_ok=True)
-    os.makedirs(data_folder, exist_ok=True)
+    os.makedirs("./models/logs", exist_ok = True)
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
 
     train_config = config["training"]
     batch_size = train_config.get('batch_size', 64)
@@ -91,13 +111,13 @@ def train(config):
     # Finds the data corresponding to new_gen:
 
     # Data directories for each generation
-    data_gens_dir = sorted(os.listdir(data_folder), key = lambda f : re.findall("[0-9]+", f)[0])
+    data_gens_dir = sorted(os.listdir(data_dir), key = extract_data_gen_idx)
 
     if not data_gens_dir:
         raise(ValueError("No training data exists."))
     
-    newest_data_gen_file = data_gens_dir[-1]
-    newest_data_gen_idx = re.findall("[0-9]+", newest_data_gen_file)[0]
+    newest_data_gen_dir = data_gens_dir[-1]
+    newest_data_gen_idx = extract_data_gen_idx(newest_data_gen_dir)
 
     # Take the last <included_dirs_indices> generations of data : sliding window
     included_dirs_indices = min(len(data_gens_dir), include_old_gens)
@@ -105,8 +125,10 @@ def train(config):
     
     # Extract all shards of data from these included data directories
     all_files = []
-    for old_data_gen in old_data_gens:
-        all_files.extend(os.listdir(old_data_gen))
+    for old_data_gen_dir in old_data_gens:
+        old_data_gen_shards = os.listdir(os.path.join(data_dir, old_data_gen_dir))
+        for shard in old_data_gen_shards:
+            all_files.append(os.path.join(data_dir, old_data_gen_dir, shard))
         
     if not all_files:
         raise ValueError(f"No files found. Generate games before training !")
@@ -126,33 +148,39 @@ def train(config):
     # Load the model :
     model = OnitamaNet(config).to(device)
 
+    # Optimizer
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+
     # Look for the latest generation of models :
     # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
-    model_gens_files = sorted(os.listdir(model_folder), key = lambda f : re.findall("[0-9]+", f)[0])
+    model_gens_files = sorted(os.listdir(model_dir), key = extract_model_gen_idx)
 
-    newest__model_gen_idx = 0
+    newest_model_gen_idx = 0
     steps = 0
     if not model_gens_files:
         print("No model has been found. Training v1 from randomly initialized weights.")
 
-
     else:
         newest_model_file = model_gens_files[-1]
-        newest__model_gen_idx = re.findall("[0-9]+", newest_model_file)[0]
+        newest_model_gen_idx = extract_model_gen_idx(newest_model_file)
     
         # Keep training current generation if the model gen index matches the data gen index.
-        if newest__model_gen_idx == newest_data_gen_idx:
-            steps = re.findall("[0-9]+", newest_model_file)[1]
-            print(f"Resuming training for generation v{newest__model_gen_idx} : steps {steps}/{total_steps}")
+        if newest_model_gen_idx == newest_data_gen_idx:
+            steps = extract_model_steps(newest_model_file)
+            print(f"Resuming training for generation v{newest_model_gen_idx} : steps {steps}/{total_steps}")
         
         # Otherwise, take the newest model and initialize a new one from its weights.
         else:
-            print(f"Starting a new training for generation v{newest_data_gen_idx}. Model initialized from v{newest__model_gen_idx}")
+            print(f"Starting a new training for generation v{newest_data_gen_idx}. Model initialized from v{newest_model_gen_idx}")
 
-        model.load_state_dict(torch.load(newest_model_file, weights_only = True))
+        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
+        model_state_dict = save_dict["model_state_dict"]
+        optimizer_state_dict = save_dict["optimizer_state_dict"]
+        model.load_state_dict(model_state_dict)
+        optimizer.load_state_dict(optimizer_state_dict)
         
-    model_path = os.path.join(model_gens_files, gen_key)
-
+    model_path = os.path.join(model_dir, gen_key)
 
 
     # Create datasets and loaders
@@ -161,8 +189,7 @@ def train(config):
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=batch_size,
-        shuffle=True,      
+        batch_size=batch_size,  
         num_workers=train_workers,     
         pin_memory=True,
         drop_last=True
@@ -170,35 +197,32 @@ def train(config):
 
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
-        batch_size=batch_size,
-        shuffle=False,      
+        batch_size=batch_size,    
         num_workers=val_workers,     
         pin_memory=True,
         drop_last=True
     )
 
 
-    # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     value_criterion = nn.MSELoss()
     policy_criterion = nn.CrossEntropyLoss()
 
 
     # Log file
-    log_file = os.path.join(logs_folder, model_name)
-
     if os.path.isfile(log_file):
         log = json.load(open(log_file, "r"))
     else:
         log = {}
 
 
-    if log[gen_key] not in log:
+    if gen_key not in log:
         log[gen_key] = {}
 
     # Training loop
-    while steps < total_steps:
+    pbar = tqdm(desc=f"v{newest_data_gen_idx} training", total = total_steps)
+    pbar.update(steps)
+    while steps <= total_steps:
         # Train
         model.train()
         total_loss = 0
@@ -225,16 +249,7 @@ def train(config):
             v_loss_acc += loss_v.item()
             batch_count += 1
             steps += 1
-
-            if steps % checkpoint_steps == 0:
-                checkpoint_path = model_path + f"_{steps}.pt"
-                print(f"Saving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
-                torch.save({
-                    'steps': steps,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.item(),
-                }, checkpoint_path)
+            pbar.update(1)
 
             if steps % test_steps == 0:
                 # Validation
@@ -258,25 +273,31 @@ def train(config):
                 avg_val_loss_policy = val_loss_policy / val_batch_count if val_batch_count > 0 else 0
                 avg_val_loss_value = val_loss_value / val_batch_count if val_batch_count > 0 else 0
 
-                print(f"Steps {steps}/{total_steps} :")
-                print(f"Policy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f}")
+                tqdm.write(f"\nSteps {steps}/{total_steps} :\nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f}")
 
                 log[gen_key][str(steps)] = {}
                 log[gen_key][str(steps)]["Policy"] = avg_val_loss_policy
                 log[gen_key][str(steps)]["Value"] = avg_val_loss_value
 
-                json.dump(log, log_file, indent=4)
+                json.dump(log, open(log_file, "w"), indent=4)
+
+            if steps % checkpoint_steps == 0:
+                remove_old_models(model_dir, newest_data_gen_idx)
+                checkpoint_path = model_path + f"_{steps}.pt"
+                tqdm.write(f"\nSaving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
+                torch.save({
+                    'steps': steps,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict()
+                }, checkpoint_path)
+
+    pbar.close()
 
 
-
-        checkpoint_path = model_path + f"_{steps}.pt"
-        print(f"Saving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
-        torch.save({
-            'steps': steps,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss.item(),
-        }, checkpoint_path)
+def remove_old_models(model_dir, gen_idx):
+    for model_file in os.listdir(model_dir):
+        if extract_model_gen_idx(model_file) == gen_idx:
+            os.remove(os.path.join(model_dir, model_file))
 
 
 if __name__ == "__main__":

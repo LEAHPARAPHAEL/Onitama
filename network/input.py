@@ -37,7 +37,8 @@ def get_nn_input(board):
 
     fill_card_pattern(8, board.side_card)
 
-    return torch.tensor(planes).unsqueeze(0)
+    return torch.tensor(planes)
+
 
 
 def get_nn_training_data(data):

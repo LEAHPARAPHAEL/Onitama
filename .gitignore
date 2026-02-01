@@ -211,4 +211,6 @@ env/
 venv/
 .venv/
 
-models/
+models/data/
+models/logs/
+models/weights/

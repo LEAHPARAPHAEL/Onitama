@@ -46,8 +46,9 @@ class MCTS:
             if game_over :
                 result = board.get_result()
                 node.backpropagate(result)
+                return
 
-        nn_input = get_nn_input(board).to(self.device)
+        nn_input = get_nn_input(board).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits, value = self.model(nn_input) 
         
