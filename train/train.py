@@ -89,19 +89,21 @@ def train(config):
     include_old_gens = train_config.get('include_old_gens', 5)
 
     # Finds the data corresponding to new_gen:
-    data_gens = sorted(os.listdir(data_folder), key = lambda f : re.findall("[0-9]+", f)[0])
-    latest_data_gen = None
 
-    if not data_gens:
+    # Data directories for each generation
+    data_gens_dir = sorted(os.listdir(data_folder), key = lambda f : re.findall("[0-9]+", f)[0])
+
+    if not data_gens_dir:
         raise(ValueError("No training data exists."))
     
-    latest_data_gen = data_gens[-1]
-    data_gen_idx = re.findall("[0-9]+", latest_data_gen)[0]
+    newest_data_gen_file = data_gens_dir[-1]
+    newest_data_gen_idx = re.findall("[0-9]+", newest_data_gen_file)[0]
 
-    included = min(len(data_gens), include_old_gens)
-    old_data_gens = data_gens[:-included]
+    # Take the last <included_dirs_indices> generations of data : sliding window
+    included_dirs_indices = min(len(data_gens_dir), include_old_gens)
+    old_data_gens = data_gens_dir[-included_dirs_indices:]
     
-    
+    # Extract all shards of data from these included data directories
     all_files = []
     for old_data_gen in old_data_gens:
         all_files.extend(os.listdir(old_data_gen))
@@ -109,6 +111,7 @@ def train(config):
     if not all_files:
         raise ValueError(f"No files found. Generate games before training !")
     
+    # Train-test split
     random.shuffle(all_files)
 
     split_idx = int(len(all_files) * train_proportion)
@@ -118,36 +121,37 @@ def train(config):
     print(f"Training on {len(train_files)} shards. Validating on {len(val_files)} shards.")
 
     
+    gen_key = f"v{newest_data_gen_idx}"
 
-    gen_key = f"v{data_gen_idx}"
     # Load the model :
     model = OnitamaNet(config).to(device)
 
     # Look for the latest generation of models :
     # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
-    model_gens = sorted(os.listdir(model_folder), key = lambda f : re.findall("[0-9]+", f)[0])
+    model_gens_files = sorted(os.listdir(model_folder), key = lambda f : re.findall("[0-9]+", f)[0])
 
-    model_gen_idx = 0
+    newest__model_gen_idx = 0
     steps = 0
-    if not model_gens:
+    if not model_gens_files:
         print("No model has been found. Training v1 from randomly initialized weights.")
 
 
     else:
-        latest_model = model_gens[-1]
-        model_gen_idx = re.findall("[0-9]+", latest_model)[0]
+        newest_model_file = model_gens_files[-1]
+        newest__model_gen_idx = re.findall("[0-9]+", newest_model_file)[0]
     
-        # Keep training current generation
-        if model_gen_idx == data_gen_idx:
-            steps = re.findall("[0-9]+", latest_model)[1]
-            print(f"Resuming training for generation v{model_gen_idx} : steps {steps}/{total_steps}")
+        # Keep training current generation if the model gen index matches the data gen index.
+        if newest__model_gen_idx == newest_data_gen_idx:
+            steps = re.findall("[0-9]+", newest_model_file)[1]
+            print(f"Resuming training for generation v{newest__model_gen_idx} : steps {steps}/{total_steps}")
         
+        # Otherwise, take the newest model and initialize a new one from its weights.
         else:
-            print(f"Starting a new training for generation v{data_gen_idx}. Model initialized from v{model_gen_idx}")
+            print(f"Starting a new training for generation v{newest_data_gen_idx}. Model initialized from v{newest__model_gen_idx}")
 
-        model.load_state_dict(torch.load(latest_model, weights_only = True))
+        model.load_state_dict(torch.load(newest_model_file, weights_only = True))
         
-    model_path = os.path.join(model_gens, gen_key)
+    model_path = os.path.join(model_gens_files, gen_key)
 
 
 
@@ -224,7 +228,7 @@ def train(config):
 
             if steps % checkpoint_steps == 0:
                 checkpoint_path = model_path + f"_{steps}.pt"
-                print(f"Saving checkpoint for v{data_gen_idx} at {checkpoint_path}")
+                print(f"Saving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
                 torch.save({
                     'steps': steps,
                     'model_state_dict': model.state_dict(),
@@ -266,7 +270,7 @@ def train(config):
 
 
         checkpoint_path = model_path + f"_{steps}.pt"
-        print(f"Saving checkpoint for v{data_gen_idx} at {checkpoint_path}")
+        print(f"Saving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
         torch.save({
             'steps': steps,
             'model_state_dict': model.state_dict(),
