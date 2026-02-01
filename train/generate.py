@@ -68,7 +68,7 @@ def generate(args):
         gen = extract_model_gen_idx(newest_model_file) + 1
 
         steps = extract_model_steps(newest_model_file)
-        if steps != total_steps:
+        if steps < total_steps:
             print(f"Model v{gen - 1} has not finished training. Finish training before generating new positions.")
             return
         print(f"Found model for v{gen} generation. Loading from {newest_model_file}.")
@@ -154,18 +154,21 @@ def generate(args):
 
                 if new_shard_idx == required_shards:
                     pbar.close()
+                    remove_old_gens(data_dir, include_old_gens)
                     return
 
 
+
+
+
+
+def remove_old_gens(data_dir, include_old_gens):
     # Remove old data generations
     sorted_data_dir = sorted(os.listdir(data_dir), key=lambda f : int(f.strip("v")))
     if len(sorted_data_dir) > include_old_gens:
         for old_data_gen_dir in sorted_data_dir[:-include_old_gens]:
+            print(old_data_gen_dir)
             shutil.rmtree(os.path.join(data_dir, old_data_gen_dir))
-
-
-
-
 
 
 

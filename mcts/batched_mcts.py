@@ -29,6 +29,10 @@ class BatchedMCTS:
             nn_inputs = []
 
             for i in range(batch_size):
+
+                if boards[i] is None:
+                    continue
+
                 node = roots[i]
                 board = boards[i].clone() 
                 
@@ -83,7 +87,12 @@ class BatchedMCTS:
                 node.backpropagate(val)
 
         policies = []
-        for root in roots:
+        for k, root in enumerate(roots):
+            
+            if boards[k] is None:
+                policies.append(None)
+                continue
+
             total_visits = sum(c.visit_count for c in root.children.values())
             probs = torch.zeros(1252) 
             

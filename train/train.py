@@ -222,7 +222,8 @@ def train(args):
     # Training loop
     pbar = tqdm(desc=f"v{newest_data_gen_idx} training", total = total_steps)
     pbar.update(steps)
-    while steps <= total_steps:
+
+    while True:
         # Train
         model.train()
         total_loss = 0
@@ -290,6 +291,12 @@ def train(args):
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict()
                 }, checkpoint_path)
+
+            if steps == test_steps:
+                break
+
+        if steps == test_steps:
+            break
 
     pbar.close()
 

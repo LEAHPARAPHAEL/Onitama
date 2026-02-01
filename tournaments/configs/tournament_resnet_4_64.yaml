@@ -1,0 +1,13 @@
+tournament:
+  name: "tournament_resnet_4_64"
+  max_nodes: 100
+  rounds: 100
+  batch_size: 64
+
+models:
+  resnet_4_64: 
+    config: "resnet_4_64.yaml"
+    start_gen: 0
+    end_gen: 100
+    step_gen: 1
+

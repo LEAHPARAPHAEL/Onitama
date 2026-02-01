@@ -139,3 +139,15 @@ def get_5_random_cards():
 
     return chosen_cards
 
+
+def get_5_cards_with_fixed_start(blue : bool):
+    length = len(CARDS)
+    side_card = random.randint(0, length // 2 - 1) * 2 + (1 - blue)
+
+    all_cards = list(range(length))
+    all_cards.remove(side_card)
+    random.shuffle(all_cards)
+    chosen_cards = all_cards[:4]
+
+    return chosen_cards + [side_card]
+    
