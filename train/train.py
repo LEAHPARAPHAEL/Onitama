@@ -140,7 +140,7 @@ def train(args):
     train_files = all_files[:split_idx]
     val_files = all_files[split_idx:]
 
-    print(f"Training on {len(train_files)} shards. Validating on {len(val_files)} shards.")
+    print(f"Training on {len(train_files)} shard(s). Validating on {len(val_files)} shard(s).")
 
     
     gen_key = f"v{newest_data_gen_idx}"
@@ -159,7 +159,7 @@ def train(args):
     newest_model_gen_idx = 0
     steps = 0
     if not model_gens_files:
-        print("No model has been found. Training v1 from randomly initialized weights.")
+        print("No model has been found. Training v0 from randomly initialized weights.")
 
     else:
         newest_model_file = model_gens_files[-1]
@@ -292,10 +292,10 @@ def train(args):
                     'optimizer_state_dict': optimizer.state_dict()
                 }, checkpoint_path)
 
-            if steps == test_steps:
+            if steps == total_steps:
                 break
 
-        if steps == test_steps:
+        if steps == total_steps:
             break
 
     pbar.close()

@@ -102,12 +102,28 @@ class Board:
             tuple(self.player_cards + self.opponent_cards + [self.side_card])
         )
 
+    '''
     # Can probably be optimized a lot using pure bit manipulation, but fine for now.
-    def rotate_180(self, bitboard : int ):
+    def rotate_180(self, bitboard : int):
         """
         Rotates the board so that the current player is always at the bottom.
         """
         return int(f"{bitboard:025b}"[::-1], 2)
+    '''
+    def rotate_180(self, b: int):
+        """
+        Rotates the board so that the current player is always at the bottom.
+        Probably more efficient than the one above due to pure bitwise manipulation.
+        """
+        # Exchange pieces of the bitboard made of increasing length (1, 2, 4, 8, 16)
+        b = ((b >> 1) & 0x55555555) | ((b & 0x55555555) << 1)
+        b = ((b >> 2) & 0x33333333) | ((b & 0x33333333) << 2)
+        b = ((b >> 4) & 0x0F0F0F0F) | ((b & 0x0F0F0F0F) << 4)
+        b = ((b >> 8) & 0x00FF00FF) | ((b & 0x00FF00FF) << 8)
+        b = (b >> 16) | (b << 16) & 0xFFFFFFFF
+
+        # Shifts 7 to right to go from 32 bits to 25
+        return b >> 7
 
 
     def get_legal_moves(self):

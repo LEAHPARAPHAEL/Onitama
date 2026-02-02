@@ -10,6 +10,8 @@ class MCTS:
         self.model = model
         self.model.eval() 
         self.num_simulations = config.get('simulations', 800)
+        self.temperature = config.get('temperature', 0.05)
+        self.inverse_temperature = 1. / self.temperature
         self.c_puct = config.get('c_puct', 1.0)
         self.device = device
         
@@ -26,10 +28,10 @@ class MCTS:
             
         action_probs = torch.zeros(1252)
         
-        total_visits = sum(child.visit_count for child in root.children.values())
+        total_visits = sum(child.visit_count ** self.inverse_temperature for child in root.children.values())
         
         for action_idx, child in root.children.items():
-            action_probs[action_idx] = child.visit_count / total_visits
+            action_probs[action_idx] = (child.visit_count ** self.inverse_temperature) / total_visits
             
         return action_probs
 

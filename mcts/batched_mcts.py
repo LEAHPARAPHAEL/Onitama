@@ -9,6 +9,8 @@ class BatchedMCTS:
         self.model = model
         self.model.eval()
         self.num_simulations = config.get('simulations', 100)
+        self.temperature = config.get('temperature', 0.05)
+        self.inverse_temperature = 1. / self.temperature
         self.c_puct = config.get('c_puct', 1.0)
         self.device = device
 
@@ -93,12 +95,12 @@ class BatchedMCTS:
                 policies.append(None)
                 continue
 
-            total_visits = sum(c.visit_count for c in root.children.values())
+            total_visits = sum(c.visit_count ** self.inverse_temperature for c in root.children.values())
             probs = torch.zeros(1252) 
             
             if total_visits > 0:
                 for action_idx, child in root.children.items():
-                    probs[action_idx] = child.visit_count / total_visits
+                    probs[action_idx] = (child.visit_count ** self.inverse_temperature) / total_visits
             else:
                 probs[0] = 1.0 
                 

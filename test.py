@@ -1,136 +1,73 @@
 from game.board import Board
-import game.board
+from game.board_utils import CARDS, get_5_random_cards, Move
 import random
 import time
-
-def run_random_game():
-    # 1. Setup: 5 Random cards
-    all_cards = list(range(16))
-    random.shuffle(all_cards)
-    chosen_cards = all_cards[:5]
-    
-    # Initialize Board
-    # (Assuming you put the class logic in 'OnitamaBoard')
-    board = Board(chosen_cards)
-    
-    print("Starting Random Game...")
-    print(board)
-    time.sleep(1)
-    
-    while board.turn_count < 100:
-        # 1. Generate Legal Moves
-        moves = board.get_legal_moves()
-        
-        if not moves:
-            print(f"No moves available! {board.turn_count} Draw?")
-            break
-            
-        # 2. Pick a Random Move
-        move = random.choice(moves)
-        print(f"\n> Executing Move: From {move.from_idx} to {move.to_idx} using {game.board.CARD_NAMES[board.player_cards[move.card_slot]]}")
-        
-        # 3. Apply Move & Check Win
-        result = board.play_move(move)
-        
-        # 4. Display New State
-        print(board)
-        
-        # 5. Handle Game Over
-        if result == 1:
-            winner = "BLUE" if (board.blue) else "RED"
-            # Note: We check % 2 != 0 because turn_count incremented inside play_move
-            print(f"\n GAME OVER! {winner} Wins!")
-            return
-            
-        time.sleep(0.5) # Slight pause to watch the game
-
-
-
+from network.input import get_nn_training_data
 import torch
-import torch.nn as nn
-import time
-from network.model import OnitamaNet
-import yaml
 
-# --- IMPORTS (Replace these with your actual files) ---
-# from game.board import Board
-# from mcts.mcts import MCTS
-# from network.model import AlphaZeroNet, get_nn_input
+def rotate_180(b: int):
+    """
+    Bitwise rotation for 25-bit board.
+    Reverses the bits of a 32-bit integer, then adjusts for the 25-bit size.
+    """
+    # 1. Standard 32-bit Reverse (Swap adjacent, then pairs, then nibbles...)
+    b = ((b >> 1) & 0x55555555) | ((b & 0x55555555) << 1)
+    b = ((b >> 2) & 0x33333333) | ((b & 0x33333333) << 2)
+    b = ((b >> 4) & 0x0F0F0F0F) | ((b & 0x0F0F0F0F) << 4)
+    b = ((b >> 8) & 0x00FF00FF) | ((b & 0x00FF00FF) << 8)
+    b = (b >> 16) | (b << 16) & 0xFFFFFFFF
 
-def play_test_game():
-    print(">>> INITIALIZING SYSTEMS...")
-    
-    # 1. Setup Network (Random Weights)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    config = yaml.safe_load(open("configs/resnet_4_64.yaml", "r"))
-    model = OnitamaNet(config).to(device)
-    model.eval()
-    print(f"Model created on {device}")
+    # 2. Adjust for 25 bits
+    # A 32-bit reverse puts the LSB (bit 0) at bit 31.
+    # We want it at bit 24. So we shift right by (32 - 25) = 7.
+    return b >> 7
 
-    # 2. Setup Config
-    config = {
-        'simulations': 50,  # Low number for fast testing
-        'c_puct': 1.0
-    }
-    
-    # 3. Initialize Board and MCTS
-    # Assuming MCTS class is imported
-    # mcts = MCTS(model, config) 
-    # For this script to run standalone, I'll assume you have the MCTS class ready.
-    # If not, paste your MCTS class here.
-    
-    from mcts.mcts_node import MCTSNode # Ensure this import works
-    from mcts.mcts import MCTS
-    # (Using the MCTS class code you provided earlier)
-    all_cards = list(range(16))
-    random.shuffle(all_cards)
-    chosen_cards = all_cards[:5]
-    
-    # Initialize Board
-    # (Assuming you put the class logic in 'OnitamaBoard')
-    board = Board(chosen_cards)
-    print(board)
+def rotate_180_slow(bitboard : int):
+    """
+    Rotates the board so that the current player is always at the bottom.
+    """
+    return int(f"{bitboard:025b}"[::-1], 2)
 
-    print("\n>>> STARTING GAME LOOP (Random AI vs Random AI)")
-    
-    move_count = 0
-    
-    game_over = False
-    while not game_over:
-        move_count += 1
-        start_time = time.time()
-        
-        # --- A. Run MCTS ---
-        # We need a fresh MCTS instance or reset tree usually, 
-        # but for simple testing, creating a new one is safest/easiest.
-        mcts = MCTS(model, config, device) 
-        action_probs = mcts.search(board) # Returns tensor of shape (1250,)
-        
-        # --- B. Pick Action ---
-        # For testing, we can just pick the Argmax (Best Move)
-        # or Sample from distribution (to see variety)
-        best_action_idx = torch.argmax(action_probs).item()
-        
 
-        move = board.action_index_to_move(best_action_idx)
-        game_over = board.play_move(move)
-        
-        # --- D. Stats ---
-        duration = time.time() - start_time
-        print(f"Time: {duration:.2f}s | Max Prob: {action_probs[best_action_idx]:.4f}")
-        print(board)
-        print("-" * 40)
 
-        # Safety break to prevent infinite loops if logic is broken
-        if move_count > 100:
-            print("!!! EMERGENCY STOP: Game exceeded 100 moves. Check Repetition Logic.")
-            break
+def test():
 
-    # --- E. Game Over ---
-    print("\n>>> GAME OVER")
-    print(f"Total Moves: {move_count}")
-    print(f"Final Result (from current perspective): {board.get_result()}")
+
+
+
+
+    cards = get_5_random_cards()
+    for card_id in cards:
+        print(CARDS[card_id]["name"])
+    board = Board(cards)
+
+    legal_moves = board.get_legal_moves()
+
+    random_move = random.choice(legal_moves)
+
+    board.play_move(random_move)
+
+    print(rotate_180(board.opponent_disciples))
+    print(rotate_180_slow(board.opponent_disciples))
+    '''
+
+    compact_board = board.get_compact_board()
+
+    policy = torch.zeros(1252)
+    policy[0] = 1.0
+
+    value_label = 1.0
+
+    data = get_nn_training_data((compact_board, policy, value_label))
+
+    network_input, policy_label, value_label = data
+
+    print(network_input)
+    print(policy_label)
+    print(value_label)
+    '''
+
+
 
 if __name__ == "__main__":
-    #run_random_game()
-    play_test_game()
+    test()

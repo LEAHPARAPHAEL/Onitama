@@ -28,6 +28,9 @@ def end_to_end(args):
     model_name = config["model"]["name"]
     model_dir = os.path.join("models", "weights", model_name)
 
+    os.makedirs("./models", exist_ok = True)
+    os.makedirs(model_dir, exist_ok=True)
+
     while not does_exist_last_gen_model(num_gens, model_dir):
         print("\n---------------------------------------------------------------")
         generate(args)

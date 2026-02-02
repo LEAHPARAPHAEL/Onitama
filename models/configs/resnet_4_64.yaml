@@ -16,7 +16,7 @@ training:
   test_steps: 5000
   learning_rate: 0.0001
   weight_decay: 0.0001
-  batch_size: 32
+  batch_size: 64
   train_proportion: 0.9
   include_old_gens: 5
 
@@ -26,7 +26,9 @@ data:
   batch_size : 64
 
 mcts:
-  simulations: 100
+  simulations: 200
   c_puct: 1.0
+  temperature: 0.05
+
 
 generations: 20
