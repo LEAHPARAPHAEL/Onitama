@@ -2,43 +2,20 @@
     "resnet_4_64_v0": {
         "resnet_4_64_v1": {
             "played": 400,
-            "wins": 218,
-            "losses": 182,
-            "draws": 0
-        },
-        "resnet_4_64_v2": {
-            "played": 400,
-            "wins": 193,
-            "losses": 207,
+            "wins": 173,
+            "losses": 227,
             "draws": 0
         }
     },
     "resnet_4_64_v1": {
         "resnet_4_64_v0": {
             "played": 400,
-            "wins": 182,
-            "losses": 218,
-            "draws": 0
-        },
-        "resnet_4_64_v2": {
-            "played": 400,
-            "wins": 206,
-            "losses": 194,
+            "wins": 227,
+            "losses": 173,
             "draws": 0
         }
     },
-    "resnet_4_64_v2": {
-        "resnet_4_64_v0": {
-            "played": 400,
-            "wins": 207,
-            "losses": 193,
-            "draws": 0
-        },
-        "resnet_4_64_v1": {
-            "played": 400,
-            "wins": 194,
-            "losses": 206,
-            "draws": 0
-        }
-    }
+    "resnet_4_64_v2": {},
+    "resnet_4_64_v3": {},
+    "resnet_4_64_v4": {}
 }

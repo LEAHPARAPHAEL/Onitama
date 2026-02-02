@@ -107,6 +107,8 @@ def train(args):
     test_steps = train_config.get('test_steps', 100)
     checkpoint_steps = train_config.get('checkpoint_steps', 1000)
     include_old_gens = train_config.get('include_old_gens', 5)
+    momentum = train_config.get("momentum", 0.9)
+    nesterov = train_config.get("nesterov", True)
 
     # Finds the data corresponding to new_gen:
 
@@ -149,8 +151,8 @@ def train(args):
     model = OnitamaNet(config).to(device)
 
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-
+    #optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
 
     # Look for the latest generation of models :
     # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
@@ -253,6 +255,7 @@ def train(args):
             pbar.update(1)
 
             if steps % test_steps == 0:
+                tqdm.write(f"\Train : steps {steps}/{total_steps} \nPolicy : {p_loss_acc / batch_count:.4f} | Value : {v_loss_acc / batch_count:.4f}")
                 # Validation
                 model.eval()
                 val_loss_policy = 0
@@ -274,11 +277,13 @@ def train(args):
                 avg_val_loss_policy = val_loss_policy / val_batch_count if val_batch_count > 0 else 0
                 avg_val_loss_value = val_loss_value / val_batch_count if val_batch_count > 0 else 0
 
-                tqdm.write(f"\nSteps {steps}/{total_steps} :\nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f}")
+                tqdm.write(f"\Validation : steps {steps}/{total_steps} \nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f}")
 
                 log[gen_key][str(steps)] = {}
-                log[gen_key][str(steps)]["Policy"] = avg_val_loss_policy
-                log[gen_key][str(steps)]["Value"] = avg_val_loss_value
+                log[gen_key][str(steps)]["Train policy"] = p_loss_acc / batch_count
+                log[gen_key][str(steps)]["Train value"] = v_loss_acc / batch_count
+                log[gen_key][str(steps)]["Val policy"] = avg_val_loss_policy
+                log[gen_key][str(steps)]["Val value"] = avg_val_loss_value
 
                 json.dump(log, open(log_file, "w"), indent=4)
 

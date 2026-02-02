@@ -5,13 +5,14 @@ model:
   input_planes: 9        
   board_size: 5           
   action_space_size: 1252
-  value_head_hidden: 64  
+  value_head_hidden: 128
   policy_head_hidden : 2 
+  value_head_channels : 32
   dropout: 0.0
   keep_latest: 20
 
 training:
-  total_steps: 50000
+  total_steps: 20000
   checkpoint_steps: 5000
   test_steps: 5000
   learning_rate: 0.0001
@@ -19,14 +20,16 @@ training:
   batch_size: 64
   train_proportion: 0.9
   include_old_gens: 5
+  momentum: 0.9
+  nesterov: true
 
 data:
-  total_positions: 50000
-  positions_per_shard: 5000
+  total_positions: 100000
+  positions_per_shard: 10000
   batch_size : 64
 
 mcts:
-  simulations: 200
+  simulations: 100
   c_puct: 1.0
   temperature: 0.05
 

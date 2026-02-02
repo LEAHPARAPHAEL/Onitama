@@ -119,11 +119,11 @@ def generate(args):
             board = boards[i]
             policy = policies[i]
             
-            game_histories[i].append([
+            game_histories[i].append((
                 board.get_compact_board(), 
                 policy, 
                 board.turn
-            ])
+            ))
 
         
             action_idx = torch.multinomial(policy, 1).item()

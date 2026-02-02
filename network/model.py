@@ -30,6 +30,7 @@ class OnitamaNet(nn.Module):
         self.board_size = config['model']['board_size']
         self.action_size = config['model']['action_space_size']
         self.pol_hidden = config['model']['policy_head_hidden']
+        self.val_channels = config['model']['value_head_channels']
         self.val_hidden = config['model']['value_head_hidden']
 
         
@@ -47,9 +48,9 @@ class OnitamaNet(nn.Module):
         self.policy_bn = nn.BatchNorm2d(self.pol_hidden)
         self.policy_fc = nn.Linear(self.pol_hidden * self.board_size * self.board_size, self.action_size)
 
-        self.value_conv = nn.Conv2d(self.num_channels, 1, kernel_size=1) 
-        self.value_bn = nn.BatchNorm2d(1)
-        self.value_fc1 = nn.Linear(1 * self.board_size * self.board_size, self.val_hidden)
+        self.value_conv = nn.Conv2d(self.num_channels, self.val_channels, kernel_size=1) 
+        self.value_bn = nn.BatchNorm2d(self.val_channels)
+        self.value_fc1 = nn.Linear(self.val_channels * self.board_size * self.board_size, self.val_hidden)
         self.value_fc2 = nn.Linear(self.val_hidden, 1) 
 
     def forward(self, x):

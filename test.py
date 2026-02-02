@@ -2,53 +2,47 @@ from game.board import Board
 from game.board_utils import CARDS, get_5_random_cards, Move
 import random
 import time
-from network.input import get_nn_training_data
+from network.input import get_nn_training_data, get_nn_input
 import torch
-
-def rotate_180(b: int):
-    """
-    Bitwise rotation for 25-bit board.
-    Reverses the bits of a 32-bit integer, then adjusts for the 25-bit size.
-    """
-    # 1. Standard 32-bit Reverse (Swap adjacent, then pairs, then nibbles...)
-    b = ((b >> 1) & 0x55555555) | ((b & 0x55555555) << 1)
-    b = ((b >> 2) & 0x33333333) | ((b & 0x33333333) << 2)
-    b = ((b >> 4) & 0x0F0F0F0F) | ((b & 0x0F0F0F0F) << 4)
-    b = ((b >> 8) & 0x00FF00FF) | ((b & 0x00FF00FF) << 8)
-    b = (b >> 16) | (b << 16) & 0xFFFFFFFF
-
-    # 2. Adjust for 25 bits
-    # A 32-bit reverse puts the LSB (bit 0) at bit 31.
-    # We want it at bit 24. So we shift right by (32 - 25) = 7.
-    return b >> 7
-
-def rotate_180_slow(bitboard : int):
-    """
-    Rotates the board so that the current player is always at the bottom.
-    """
-    return int(f"{bitboard:025b}"[::-1], 2)
-
+from network.model import OnitamaNet
+import os
+import yaml
 
 
 def test():
 
+    #cards = get_5_random_cards()
+    #for card_id in cards:
+    #    print(CARDS[card_id]["name"])
 
-
-
-
-    cards = get_5_random_cards()
-    for card_id in cards:
-        print(CARDS[card_id]["name"])
+    cards = list(range(0, 5))
+    
     board = Board(cards)
 
-    legal_moves = board.get_legal_moves()
+    boards = []
+    while not board.is_game_over():
+        legal_moves = board.get_legal_moves()
+        random_move = random.choice(legal_moves)
+        boards.append((board.clone(), random_move))
+        board.play_move(random_move)
 
-    random_move = random.choice(legal_moves)
+    last_board, last_move = boards[-1]
+    last_action_idx = last_board.move_to_action_index(last_move)
 
-    board.play_move(random_move)
 
-    print(rotate_180(board.opponent_disciples))
-    print(rotate_180_slow(board.opponent_disciples))
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    network_input = get_nn_input(last_board).unsqueeze(0).to(device)
+
+    config = yaml.safe_load(open(os.path.join("models", "configs", "resnet_4_64.yaml"), "r"))
+    model = OnitamaNet(config).to(device)
+    save_dict = torch.load(os.path.join("models", "weights", "resnet_4_64", "v0_50000.pt"), weights_only = False)
+    model_state_dict = save_dict["model_state_dict"]
+    model.load_state_dict(model_state_dict)
+    policy, value = model(network_input)
+
+    print(value)
+    print(policy.squeeze(0)[last_action_idx])
     '''
 
     compact_board = board.get_compact_board()
