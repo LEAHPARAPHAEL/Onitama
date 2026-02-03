@@ -3,4 +3,10 @@
 CURRENT_RUN := template
 
 launch_job:
-	sbatch ${CURRENT_RUN}.sh
+	sbatch remote/scripts/${CURRENT_RUN}.sh
+
+check_job:
+	squeue
+
+view_job_output:
+	cat logs/${CURRENT_RUN}.out

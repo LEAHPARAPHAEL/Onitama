@@ -1,4 +1,4 @@
 torch
 numpy
-yaml
+pyyaml
 tqdm
