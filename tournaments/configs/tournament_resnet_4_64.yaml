@@ -1,7 +1,7 @@
 tournament:
   name: "tournament_resnet_4_64"
   max_nodes: 200
-  rounds: 400
+  rounds: 200
   batch_size: 64
 
 models:

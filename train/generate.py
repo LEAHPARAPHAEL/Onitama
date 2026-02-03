@@ -53,7 +53,10 @@ def generate(args):
     total_positions = data_config.get("total_positions", 50000)
     include_old_gens = config["training"].get("include_old_gens", 5)
     batch_size = data_config.get("batch_size", 64)
-    total_steps = config["training"].get("total_steps", 50000)
+    total_steps = config["training"].get("total_steps", None)
+    epochs = config["training"].get("epochs", 10)
+    train_batch_size = config["training"].get("batch_size", 64)
+
 
     required_shards = total_positions // positions_per_shard
 
@@ -66,6 +69,9 @@ def generate(args):
     if model_gens_files:
         newest_model_file = model_gens_files[-1]
         gen = extract_model_gen_idx(newest_model_file) + 1
+
+        if not total_steps:
+            total_steps = epochs * total_positions * min(include_old_gens, gen) // train_batch_size
 
         steps = extract_model_steps(newest_model_file)
         if steps < total_steps:

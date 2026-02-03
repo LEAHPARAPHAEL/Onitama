@@ -6,22 +6,23 @@ model:
   board_size: 5           
   action_space_size: 1252
   value_head_hidden: 128
-  policy_head_hidden : 2 
+  policy_head_channels : 16
   value_head_channels : 32
   dropout: 0.0
   keep_latest: 20
 
 training:
-  total_steps: 20000
+  epochs: 10
   checkpoint_steps: 5000
   test_steps: 5000
-  learning_rate: 0.0001
+  learning_rate: 0.01
   weight_decay: 0.0001
   batch_size: 64
   train_proportion: 0.9
   include_old_gens: 5
   momentum: 0.9
   nesterov: true
+  lr_schedule : [3, 7]
 
 data:
   total_positions: 100000
