@@ -17,6 +17,16 @@ class ResBlock(nn.Module):
         out += x
         out = F.relu(out)
         return out
+    
+class ScalarValueHead(nn.Module):
+    def __init__(self, val_hidden):
+        super().__init__()
+        self.fc = nn.Linear(val_hidden, 1)
+
+    def forward(self, x):
+        out = F.tanh(self.fc(x))
+        return out
+        
 
 class OnitamaNet(nn.Module):
     def __init__(self, config):
@@ -49,7 +59,7 @@ class OnitamaNet(nn.Module):
         if self.wdl:
             self.value_fc2 = nn.Linear(self.val_hidden, 3) 
         else:
-            self.value_fc2 = nn.Linear(self.val_hidden, 1) 
+            self.value_fc2 = ScalarValueHead(self.val_hidden)
 
     def forward(self, x):
         x = self.conv_input(x)
@@ -62,10 +72,7 @@ class OnitamaNet(nn.Module):
         v = F.relu(self.value_conv(x))
         v = self.flatten(v)
         v = F.relu(self.value_fc1(v))
-        if self.wdl:
-            v = torch.tanh(self.value_fc2(v)) 
-        else:
-            v = self.value_fc2(v)
+        v = self.value_fc2(v)
 
         return p, v
 

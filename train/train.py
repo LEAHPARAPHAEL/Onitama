@@ -12,12 +12,59 @@ import math
 from network.model import OnitamaNet
 import json
 from tqdm import tqdm
+from game.board_utils import create_horizontal_flip_mask
+import torch.nn.functional as F
+from bisect import bisect_right
 
+
+class WDLValueLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.ce_loss = nn.CrossEntropyLoss()
+
+    def forward(self, logits, targets):
+        targets = targets.view(-1)
+        
+        # -1 becomes 0 (Loss)
+        #  0 becomes 1 (Draw)
+        #  1 becomes 2 (Win)
+        target_indices = (targets + 1).long()
+        
+        return self.ce_loss(logits, target_indices)
+    
+class MSEValueLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse_loss = nn.MSELoss()
+
+    def forward(self, preds, targets):
+
+        return self.mse_loss(preds.view(-1), targets.view(-1))
+    
+class MaskIllegalMovesPolicyLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.ce_loss = nn.CrossEntropyLoss()
+
+    def forward(self, p_logits, target_p):
+        illegal_mask = target_p < -0.5
+        clean_target = F.relu(target_p) 
+
+        p_logits[illegal_mask] = float('-inf')
+
+        return self.ce_loss(p_logits, clean_target)
+        
+    
 
 class OnitamaStreamingDataset(IterableDataset):
-    def __init__(self, files, wdl):
+    def __init__(self, files, use_data_augmentation = False):
         self.files = files
-        self.wdl = wdl
+        self.use_data_augmentation = use_data_augmentation
+        if use_data_augmentation:
+            self.flip_mask = create_horizontal_flip_mask()
+
+    def flip_policy(self, policy_vector):
+            return policy_vector[self.flip_mask]
 
     def __iter__(self):
 
@@ -46,6 +93,10 @@ class OnitamaStreamingDataset(IterableDataset):
 
             for raw_item in data_chunk:
                 nn_input, policy_target, value_target = get_nn_training_data(raw_item)
+                    
+                if self.use_data_augmentation and random.random() > 0.5:
+                    policy_target = self.flip_policy(policy_target)
+                    nn_input = torch.flip(nn_input, dims=[-1])
 
                 yield (
                     nn_input, 
@@ -76,6 +127,23 @@ def extract_model_steps(str : str):
     except:
         return -1
     
+
+def get_lr_lambda(warmup_steps, milestones, gamma=0.1):
+    """
+    Returns a lambda function for the scheduler.
+    """
+    def lr_lambda(current_step):
+        if current_step < warmup_steps:
+            return float(current_step) / float(warmup_steps)
+        
+        if not milestones:
+            return 1.0
+        
+        index = bisect_right(milestones, current_step)
+        return gamma ** index
+
+    return lr_lambda
+    
 # data v0 is generated from a random model
 # model v0 trains on data v0
 # data v1 is generated from v0
@@ -99,20 +167,23 @@ def train(args):
 
     train_config = config["training"]
     batch_size = train_config.get('batch_size', 64)
-    lr = train_config.get('learning_rate', 0.001)
+    lr = train_config.get('learning_rate', 0.01)
     weight_decay = train_config.get('weight_decay', 1e-4)
     train_proportion = train_config.get('train_proportion', 0.9)
     train_workers = train_config.get('train_workers', 4)
     val_workers = train_config.get('val_workers', 2)
     total_steps = train_config.get('total_steps', None)
-    test_steps = train_config.get('test_steps', 100)
-    checkpoint_steps = train_config.get('checkpoint_steps', 1000)
+    test_steps = train_config.get('test_steps', None)
+    checkpoint_steps = train_config.get('checkpoint_steps', None)
     include_old_gens = train_config.get('include_old_gens', 5)
     momentum = train_config.get("momentum", 0.9)
     nesterov = train_config.get("nesterov", True)
+    use_data_augmentation = train_config.get("use_data_augmentation", False)
 
-    
-
+    wdl = config["model"].get("wdl", False)
+    mask_illegal_moves = config["model"].get("mask_illegal_moves", False)
+    warmup_steps = train_config.get("warmup_steps", 1000)
+    lr_schedule = train_config.get("lr_schedule", None)
 
     # Finds the data corresponding to new_gen:
 
@@ -161,6 +232,17 @@ def train(args):
         total_positions = config["data"].get("total_positions", 100000)
         total_steps = epochs * total_positions * len(old_data_gens) // batch_size
 
+        # If total steps is not specified, the warmup steps should be in terms of epochs
+        # This converts them to steps
+        if lr_schedule:
+            lr_schedule = list(map(lambda epoch: epoch * total_positions // batch_size, lr_schedule))
+
+    if not checkpoint_steps:
+        checkpoint_steps = total_steps // 10
+
+    if not test_steps:
+        test_steps = total_steps // 10
+
 
     # Load the model :
     model = OnitamaNet(config).to(device)
@@ -169,14 +251,9 @@ def train(args):
     #optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
 
-    # Milestones are in number of epochs
-    lr_schedule = train_config.get("lr_schedule", None)
-    milestones = []
-    if lr_schedule:
-        for milestone in lr_schedule:
-            milestones.append(milestone)
 
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones = milestones, gamma = 0.1)
+    lr_lambda = get_lr_lambda(warmup_steps=warmup_steps, milestones=lr_schedule) 
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lr_lambda)
 
     # Look for the latest generation of models :
     # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
@@ -190,30 +267,31 @@ def train(args):
     else:
         newest_model_file = model_gens_files[-1]
         newest_model_gen_idx = extract_model_gen_idx(newest_model_file)
+        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
+        model_state_dict = save_dict["model_state_dict"]
+        model.load_state_dict(model_state_dict)
     
         # Keep training current generation if the model gen index matches the data gen index.
         if newest_model_gen_idx == newest_data_gen_idx:
             steps = extract_model_steps(newest_model_file)
             print(f"Resuming training for generation v{newest_model_gen_idx} : steps {steps}/{total_steps}")
+            optimizer_state_dict = save_dict["optimizer_state_dict"]
+            scheduler_state_dict = save_dict["scheduler_state_dict"]
+            
+            optimizer.load_state_dict(optimizer_state_dict)
+            scheduler.load_state_dict(scheduler_state_dict)
         
         # Otherwise, take the newest model and initialize a new one from its weights.
         else:
             print(f"Starting a new training for generation v{newest_data_gen_idx}. Model initialized from v{newest_model_gen_idx}")
 
-        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
-        model_state_dict = save_dict["model_state_dict"]
-        optimizer_state_dict = save_dict["optimizer_state_dict"]
-        scheduler_state_dict = save_dict["scheduler_state_dict"]
-        model.load_state_dict(model_state_dict)
-        optimizer.load_state_dict(optimizer_state_dict)
-        scheduler.load_state_dict(scheduler_state_dict)
         
     model_path = os.path.join(model_dir, gen_key)
 
 
     # Create datasets and loaders
-    train_dataset = OnitamaStreamingDataset(train_files, model.wdl)
-    val_dataset = OnitamaStreamingDataset(val_files, model.wdl)
+    train_dataset = OnitamaStreamingDataset(train_files, use_data_augmentation=use_data_augmentation)
+    val_dataset = OnitamaStreamingDataset(val_files, use_data_augmentation=use_data_augmentation)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -234,11 +312,15 @@ def train(args):
 
     value_criterion = nn.MSELoss()
 
-    if model.wdl:
-        value_criterion = nn.CrossEntropyLoss()
+    if wdl:
+        value_criterion = WDLValueLoss()
     else:
-        value_criterion = nn.MSELoss()
-    policy_criterion = nn.CrossEntropyLoss()
+        value_criterion = MSEValueLoss()
+
+    if mask_illegal_moves:
+        policy_criterion = MaskIllegalMovesPolicyLoss()
+    else :
+        policy_criterion = nn.CrossEntropyLoss()
 
 
     # Log file
@@ -271,7 +353,7 @@ def train(args):
             p_logits, v_pred = model(inputs)
 
             loss_p = policy_criterion(p_logits, target_p)
-            loss_v = value_criterion(v_pred.view(-1), target_v.view(-1))
+            loss_v = value_criterion(v_pred, target_v)
             loss = loss_p + loss_v
 
             loss.backward()
@@ -299,7 +381,7 @@ def train(args):
                         p_logits, v_pred = model(inputs)
                         
                         l_p = policy_criterion(p_logits, target_p)
-                        l_v = value_criterion(v_pred.view(-1), target_v.view(-1))
+                        l_v = value_criterion(v_pred, target_v)
                         val_loss_value += l_v.item()
                         val_loss_policy += l_p.item()
                         val_batch_count += 1
@@ -325,16 +407,18 @@ def train(args):
                     'steps': steps,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict()
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'training_over': steps == total_steps
                 }, checkpoint_path)
+
+            scheduler.step()
 
             if steps == total_steps:
                 break
 
         if steps == total_steps:
             break
-        
-        scheduler.step()
+    
 
     pbar.close()
 

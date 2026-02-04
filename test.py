@@ -9,6 +9,47 @@ import os
 import yaml
 
 
+def create_horizontal_flip_mask():
+    mask = torch.arange(1252, dtype=torch.long)
+
+    num_cards = 2
+    board_size = 5
+    squares = board_size * board_size  
+    stride_card = squares * squares    
+    stride_from = squares             
+
+    def get_flipped_sq(sq_idx):
+        """Convert linear 0-24 index to (row, col), flip col, return new index."""
+        row = sq_idx // board_size
+        col = sq_idx % board_size
+        
+        new_col = (board_size - 1) - col  
+        
+        return row * board_size + new_col
+
+
+    for card_idx in range(num_cards):
+        for from_sq in range(squares):
+            for to_sq in range(squares):
+                
+
+                original_idx = (card_idx * stride_card) + \
+                               (from_sq * stride_from) + \
+                               to_sq
+
+                new_from = get_flipped_sq(from_sq)
+                new_to = get_flipped_sq(to_sq)
+
+                new_idx = (card_idx * stride_card) + \
+                          (new_from * stride_from) + \
+                          new_to
+                
+                mask[original_idx] = new_idx
+
+    return mask
+
+
+
 def test():
 
     #cards = get_5_random_cards()
@@ -19,36 +60,11 @@ def test():
     
     board = Board(cards)
 
-    boards = []
-    while not board.is_game_over():
-        legal_moves = board.get_legal_moves()
-        random_move = random.choice(legal_moves)
-        boards.append((board.clone(), random_move))
-        board.play_move(random_move)
-
-    last_board, last_move = boards[-1]
-    last_action_idx = last_board.move_to_action_index(last_move)
-
-
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    network_input = get_nn_input(last_board).unsqueeze(0).to(device)
-
-    config = yaml.safe_load(open(os.path.join("models", "configs", "resnet_4_64.yaml"), "r"))
-    model = OnitamaNet(config).to(device)
-    save_dict = torch.load(os.path.join("models", "weights", "resnet_4_64", "v0_50000.pt"), weights_only = False)
-    model_state_dict = save_dict["model_state_dict"]
-    model.load_state_dict(model_state_dict)
-    policy, value = model(network_input)
-
-    print(value)
-    print(policy.squeeze(0)[last_action_idx])
-    '''
-
     compact_board = board.get_compact_board()
 
     policy = torch.zeros(1252)
-    policy[0] = 1.0
+
+    policy[1] = 1.0
 
     value_label = 1.0
 
@@ -56,12 +72,34 @@ def test():
 
     network_input, policy_label, value_label = data
 
-    print(network_input)
-    print(policy_label)
-    print(value_label)
-    '''
+    
 
 
 
 if __name__ == "__main__":
     test()
+
+    '''
+    # --- Usage    ---
+    flip_mask = create_horizontal_flip_mask()
+
+    # Verify a test case: 
+    # Move from (0,0) to (0,4) [Top-Left to Top-Right] 
+    # Should become (0,4) to (0,0) [Top-Right to Top-Left]
+    idx_original = (0 * 625) + (0 * 25) + 4   # From 0 to 4
+    idx_flipped  = (0 * 625) + (4 * 25) + 0   # From 4 to 0
+
+    print(f"Original Index: {idx_original}")     # 4
+    print(f"Mapped Index:   {flip_mask[idx_original]}") # 100 (4*25 + 0)
+    assert flip_mask[idx_original] == idx_flipped
+    print("Test passed!")
+
+    board = Board(get_5_random_cards())
+
+    random_idx = random.randint(0, 1252)
+
+    print(board.action_index_to_move(random_idx))
+    print(board.action_index_to_move(flip_mask[random_idx].item()))
+    '''
+
+

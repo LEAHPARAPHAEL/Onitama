@@ -1,5 +1,6 @@
 from collections import namedtuple
 import random
+import torch
 
 # Define a Move structure
 Move = namedtuple('Move', ['from_idx', 'to_idx', 'card_slot'])
@@ -138,6 +139,7 @@ def get_5_random_cards():
     chosen_cards = all_cards[:5]
 
     return chosen_cards
+    #return list(range(5))
 
 
 def get_5_cards_with_fixed_start(blue : bool):
@@ -150,4 +152,43 @@ def get_5_cards_with_fixed_start(blue : bool):
     chosen_cards = all_cards[:4]
 
     return chosen_cards + [side_card]
+    #return list(range(5))
     
+def create_horizontal_flip_mask():
+    mask = torch.arange(1252, dtype=torch.long)
+
+    num_cards = 2
+    board_size = 5
+    squares = board_size * board_size  
+    stride_card = squares * squares    
+    stride_from = squares             
+
+    def get_flipped_sq(sq_idx):
+        """Convert linear 0-24 index to (row, col), flip col, return new index."""
+        row = sq_idx // board_size
+        col = sq_idx % board_size
+        
+        new_col = (board_size - 1) - col  
+        
+        return row * board_size + new_col
+
+
+    for card_idx in range(num_cards):
+        for from_sq in range(squares):
+            for to_sq in range(squares):
+                
+
+                original_idx = (card_idx * stride_card) + \
+                               (from_sq * stride_from) + \
+                               to_sq
+
+                new_from = get_flipped_sq(from_sq)
+                new_to = get_flipped_sq(to_sq)
+
+                new_idx = (card_idx * stride_card) + \
+                          (new_from * stride_from) + \
+                          new_to
+                
+                mask[original_idx] = new_idx
+
+    return mask

@@ -12,6 +12,9 @@ from glob import glob
 import shutil
 import sys
 from tqdm import tqdm
+import torch.nn.functional as F
+
+import sys
 
 def extract_model_gen_idx(str : str):
     try:
@@ -48,15 +51,11 @@ def generate(args):
     os.makedirs(data_dir, exist_ok=True)
 
     data_config = config["data"]
-    mcts_config = config["mcts"]
     positions_per_shard = data_config.get("positions_per_shard", 5000)
     total_positions = data_config.get("total_positions", 50000)
     include_old_gens = config["training"].get("include_old_gens", 5)
     batch_size = data_config.get("batch_size", 64)
-    total_steps = config["training"].get("total_steps", None)
-    epochs = config["training"].get("epochs", 10)
-    train_batch_size = config["training"].get("batch_size", 64)
-
+    mask_illegal_moves = config["training"].get("mask_illegal_moves", False)
 
     required_shards = total_positions // positions_per_shard
 
@@ -69,17 +68,14 @@ def generate(args):
     if model_gens_files:
         newest_model_file = model_gens_files[-1]
         gen = extract_model_gen_idx(newest_model_file) + 1
-
-        if not total_steps:
-            total_steps = epochs * total_positions * min(include_old_gens, gen) // train_batch_size
-
-        steps = extract_model_steps(newest_model_file)
-        if steps < total_steps:
+        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
+        model_state_dict = save_dict["model_state_dict"]
+        training_over = save_dict["training_over"]
+        
+        if not training_over:
             print(f"Model v{gen - 1} has not finished training. Finish training before generating new positions.")
             return
         print(f"Found model for v{gen} generation. Loading from {newest_model_file}.")
-        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
-        model_state_dict = save_dict["model_state_dict"]
         model.load_state_dict(model_state_dict)
 
     else:
@@ -108,7 +104,7 @@ def generate(args):
     data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}.pt")
 
 
-    batched_mcts = BatchedMCTS(model, mcts_config, device)
+    batched_mcts = BatchedMCTS(model, config, device)
     boards = [Board(get_5_random_cards()) for _ in range(batch_size)]
     game_histories = [[] for _ in range(batch_size)]
 
@@ -118,8 +114,6 @@ def generate(args):
     pbar.update(positions)
     while positions < total_positions:
 
-        #print(f"Positions generated for v{gen} : {positions}/{total_positions}")
-
         policies = batched_mcts.search_batch(boards)
         for i in range(batch_size):
             board = boards[i]
@@ -127,11 +121,12 @@ def generate(args):
             
             game_histories[i].append((
                 board.get_compact_board(), 
-                policy, 
+                policy.clone(), 
                 board.turn
             ))
 
-        
+            if mask_illegal_moves:
+                policy = F.relu(policy)
             action_idx = torch.multinomial(policy, 1).item()
             move = board.action_index_to_move(action_idx)
 
