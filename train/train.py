@@ -122,7 +122,14 @@ def extract_model_gen_idx(str : str):
     
 def extract_model_steps(str : str):
     try:
-        idx = int(str.strip("v").split(".")[0].split("_")[-1])
+        idx = int(str.split(".")[0].split("_")[-1])
+        return idx
+    except:
+        return -1
+    
+def extract_positions(str : str):
+    try:
+        idx = int(str.split("_")[1])
         return idx
     except:
         return -1
@@ -201,12 +208,14 @@ def train(args):
     old_data_gens = data_gens_dir[-included_dirs_indices:]
     
     # Extract all shards of data from these included data directories
+    total_positions = 0
     all_files = []
     for old_data_gen_dir in old_data_gens:
         old_data_gen_shards = os.listdir(os.path.join(data_dir, old_data_gen_dir))
         for shard in old_data_gen_shards:
             all_files.append(os.path.join(data_dir, old_data_gen_dir, shard))
-        
+            total_positions += extract_positions(shard)
+            
     if not all_files:
         raise ValueError(f"No files found. Generate games before training !")
     
@@ -229,9 +238,7 @@ def train(args):
     # If not specified, infers the number of training steps required
     if not total_steps:
         epochs = train_config.get("epochs", 10)
-        total_positions = config["data"].get("total_positions", 100000)
-        total_steps = epochs * total_positions * len(old_data_gens) // batch_size
-
+        total_steps = epochs * total_positions // batch_size
         # If total steps is not specified, the warmup steps should be in terms of epochs
         # This converts them to steps
         if lr_schedule:

@@ -28,17 +28,17 @@ training:
   include_old_gens: 5
   momentum: 0.9
   nesterov: true
-  use_data_augmentation: false
+  use_data_augmentation: true
   mask_illegal_moves: false
 
 
 data:
-  total_positions: 100000
-  positions_per_shard: 20000
+  total_positions: 20000
+  positions_per_shard: 5000
   batch_size : 64
 
 mcts:
-  simulations: 100
+  simulations: 50
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0

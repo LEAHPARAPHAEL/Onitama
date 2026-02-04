@@ -32,7 +32,14 @@ def extract_shard_idx(str : str):
     
 def extract_model_steps(str : str):
     try:
-        idx = int(str.strip("v").split(".")[0].split("_")[-1])
+        idx = int(str.split(".")[0].split("_")[-1])
+        return idx
+    except:
+        return -1
+    
+def extract_positions(str : str):
+    try:
+        idx = int(str.split("_")[1])
         return idx
     except:
         return -1
@@ -101,7 +108,7 @@ def generate(args):
         new_shard_idx = 0
 
     data = []
-    data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}.pt")
+    data_path = os.path.join(data_newest_gen_dir, f"positions_{positions_per_shard}_{new_shard_idx}.pt")
 
 
     batched_mcts = BatchedMCTS(model, config, device)
@@ -150,7 +157,7 @@ def generate(args):
                 torch.save(data[:positions_per_shard], data_path)
                 tqdm.write(f"\nSaving {positions_per_shard} positions to {data_path}.")
                 new_shard_idx += 1
-                data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}.pt")
+                data_path = os.path.join(data_newest_gen_dir, f"positions_{positions_per_shard}_{new_shard_idx}.pt")
                 data = data[positions_per_shard:]
 
                 if new_shard_idx == required_shards:
