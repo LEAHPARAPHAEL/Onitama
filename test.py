@@ -7,7 +7,8 @@ import torch
 from network.model import OnitamaNet
 import os
 import yaml
-
+from mcts.batched_mcts import BatchedMCTS
+import torch.nn.functional as F
 
 def create_horizontal_flip_mask():
     mask = torch.arange(1252, dtype=torch.long)
@@ -73,11 +74,39 @@ def test():
     network_input, policy_label, value_label = data
 
     
+def check():
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    config = yaml.safe_load(open(os.path.join("models", "configs", "resnet.yaml"), "r"))
+
+    model = OnitamaNet(config).to(device)
+
+    cards = [1, 8, 4, 4, 0]
+    board = Board(cards)
+
+    board.player_master = (1 << 22)
+    board.opponent_master = (1 << 12)
+
+    mcts = BatchedMCTS(model, config, device)
+
+    print(board)
+
+
+    policy = mcts.search_batch([board])[0]
+
+    action_idx = torch.argmax(policy).item()
+    
+    move = board.action_index_to_move(action_idx)
+    print(move, F.relu(policy).max().item())
+
+    board.play_move(move)
+
+    print(board)
 
 
 if __name__ == "__main__":
-    test()
+    #test()
 
     '''
     # --- Usage    ---
@@ -101,5 +130,7 @@ if __name__ == "__main__":
     print(board.action_index_to_move(random_idx))
     print(board.action_index_to_move(flip_mask[random_idx].item()))
     '''
+
+    check()
 
 
