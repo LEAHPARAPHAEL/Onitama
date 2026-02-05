@@ -13,10 +13,11 @@ import shutil
 import sys
 from tqdm import tqdm
 import torch.nn.functional as F
+from network.input import get_nn_input
 
 import sys
 
-def extract_model_gen_idx(str : str):
+def extract_gen_idx(str : str):
     try:
         idx = int(str.strip("v").split(".")[0].split("_")[0])
         return idx
@@ -25,24 +26,24 @@ def extract_model_gen_idx(str : str):
     
 def extract_shard_idx(str : str):
     try:
-        idx = int(str.split("_")[-1].split(".")[0])
+        idx = int(str.split("_")[1])
         return idx
     except:
         return -1
     
 def extract_model_steps(str : str):
     try:
-        idx = int(str.split(".")[0].split("_")[-1])
+        idx = int(str.split("_")[-1].split(".")[0])
         return idx
     except:
-        return -1
+        return 0
     
 def extract_positions(str : str):
     try:
-        idx = int(str.split("_")[1])
+        idx = int(str.split("_")[-1].split(".")[0])
         return idx
     except:
-        return -1
+        return 0
 
 def generate(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,12 +70,12 @@ def generate(args):
     # Load the model :
     model = OnitamaNet(config).to(device)
     # Look for the latest generation of models :
-    model_gens_files = sorted(os.listdir(model_dir), key = extract_model_gen_idx)
+    model_gens_files = sorted(os.listdir(model_dir), key = extract_gen_idx)
 
     gen = 0
     if model_gens_files:
         newest_model_file = model_gens_files[-1]
-        gen = extract_model_gen_idx(newest_model_file) + 1
+        gen = extract_gen_idx(newest_model_file) + 1
         save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
         model_state_dict = save_dict["model_state_dict"]
         training_over = save_dict["training_over"]
@@ -95,24 +96,138 @@ def generate(args):
     data_newest_gen_dir = os.path.join(data_dir, f"v{gen}")
     os.makedirs(data_newest_gen_dir, exist_ok=True)
 
-    data_newest_gen_files = sorted(os.listdir(data_newest_gen_dir), key = extract_shard_idx)
     
-    if data_newest_gen_files:
-        last_shard = data_newest_gen_files[-1]
-        last_shard_idx = extract_shard_idx(last_shard)
-        if last_shard_idx == required_shards:
-            print(f"All the positions for v{gen} have been generated.")
-            return
-        new_shard_idx = last_shard_idx + 1
-    else:
-        new_shard_idx = 0
+    positions = 0
+    last_shard_idx = -1
+    for data_newest_gen_file in os.listdir(data_newest_gen_dir):
+        positions += extract_positions(data_newest_gen_file)
+        shard_idx = extract_shard_idx(data_newest_gen_file)
+        if shard_idx > last_shard_idx:
+            last_shard_idx = shard_idx
+    
+    new_shard_idx = last_shard_idx + 1
 
-    data = []
-    data_path = os.path.join(data_newest_gen_dir, f"positions_{positions_per_shard}_{new_shard_idx}.pt")
-
+    if positions == total_positions:
+        print(f"All positions for v{gen} have been generated.")
+        return
 
     batched_mcts = BatchedMCTS(model, config, device)
     boards = [Board(get_5_random_cards()) for _ in range(batch_size)]
+
+    game_states = [[] for _ in range(batch_size)]
+    game_policies = [[] for _ in range(batch_size)]
+    game_turns = [[] for _ in range(batch_size)]
+
+    positions = new_shard_idx * positions_per_shard
+    pbar = tqdm(desc=f"v{gen} generation", total=total_positions)
+    pbar.update(positions)
+
+    shard_states = []
+    shard_policies = []
+    shard_values = []
+
+    saved_positions = positions
+
+    while True:
+        policies = batched_mcts.search_batch(boards)
+        
+        for i in range(batch_size):
+            board = boards[i]
+            policy = policies[i]
+            
+            game_states[i].append(get_nn_input(board)) 
+            game_policies[i].append(policy.clone())
+            game_turns[i].append(board.turn)
+
+            if mask_illegal_moves:
+                policy = F.relu(policy)
+            action_idx = torch.multinomial(policy, 1).item()
+            move = board.action_index_to_move(action_idx)
+
+            game_over = board.play_move(move)
+
+            if game_over:
+                result = board.get_result()
+                potential_loser = board.get_turn()
+                
+                game_len = len(game_states[i])
+                
+                values = []
+                for t in game_turns[i]:
+                    v = result if potential_loser == t else -result
+                    values.append(v)
+                
+                shard_states.extend(game_states[i])
+                shard_policies.extend(game_policies[i])
+                shard_values.extend(values)
+                
+                positions += game_len
+                pbar.update(game_len)
+
+                game_states[i] = []
+                game_policies[i] = []
+                game_turns[i] = []
+
+                boards[i] = Board(get_5_random_cards())
+                
+                max_positions = min(positions_per_shard, total_positions - saved_positions)
+                if len(shard_states) >= max_positions:
+                    save_dict = {
+                        "states": torch.stack(shard_states[:max_positions]),
+                        "policies": torch.stack(shard_policies[:max_positions]),
+                        "values": torch.tensor(shard_values[:max_positions], dtype=torch.float32).unsqueeze(1)
+                    }
+
+                    data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}_{max_positions}.pt")
+                    torch.save(save_dict, data_path)
+                    tqdm.write(f"Saved {max_positions} positions.")
+                    
+                    shard_states = shard_states[max_positions:]
+                    shard_policies = shard_policies[max_positions:]
+                    shard_values = shard_values[max_positions:]
+                    
+                    new_shard_idx += 1
+                    
+                    saved_positions += max_positions
+                    if positions >= total_positions:
+                        return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     game_histories = [[] for _ in range(batch_size)]
 
     positions = new_shard_idx * positions_per_shard

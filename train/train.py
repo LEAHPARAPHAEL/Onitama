@@ -15,6 +15,8 @@ from tqdm import tqdm
 from game.board_utils import create_horizontal_flip_mask
 import torch.nn.functional as F
 from bisect import bisect_right
+import shutil
+import glob
 
 
 class WDLValueLoss(nn.Module):
@@ -24,10 +26,6 @@ class WDLValueLoss(nn.Module):
 
     def forward(self, logits, targets):
         targets = targets.view(-1)
-        
-        # -1 becomes 0 (Loss)
-        #  0 becomes 1 (Draw)
-        #  1 becomes 2 (Win)
         target_indices = (targets + 1).long()
         
         return self.ce_loss(logits, target_indices)
@@ -53,108 +51,85 @@ class MaskIllegalMovesPolicyLoss(nn.Module):
         p_logits[illegal_mask] = -1.0e10
         return self.ce_loss(p_logits, clean_target)
         
-    
+
+
+class OnitamaStreamingDataset(IterableDataset):
+    def __init__(self, files, use_data_augmentation=False):
+        self.files = files
+        self.use_data_augmentation = use_data_augmentation
+        if use_data_augmentation:
+            self.flip_mask = create_horizontal_flip_mask()
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        
+        if worker_info is None:
+            my_files = self.files
+        else:
+            per_worker = int(math.ceil(len(self.files) / float(worker_info.num_workers)))
+            start = worker_info.id * per_worker
+            end = min(start + per_worker, len(self.files))
+            my_files = self.files[start:end]
+
+        random.shuffle(my_files)
+
+        for filepath in my_files:
+            try:
+                data = torch.load(filepath, weights_only=False)
+                
+                states = data["states"]   
+                policies = data["policies"] 
+                values = data["values"]  
+
+                num_items = states.shape[0]
+
+
+                indices = torch.randperm(num_items)
+
+                for idx in indices:
+
+                    nn_input = states[idx]
+                    policy = policies[idx]
+                    value = values[idx]
+
+                    if self.use_data_augmentation and torch.rand(1).item() > 0.5:
+                        policy = policy[self.flip_mask]
+                        nn_input = torch.flip(nn_input, dims=[-1])
+
+                    yield nn_input, policy, value
+
+            except Exception as e:
+                print(f"Corrupt shard {filepath}: {e}")
 
 
 
-
-
-
-class OnitamaDataset(Dataset):
-    def __init__(self, states, policies, values, use_augmentation=False):
-        self.states = states
-        self.policies = policies
-        self.values = values
-        self.use_augmentation = use_augmentation
-        if use_augmentation:
-            self.flip_mask = create_horizontal_flip_mask() 
-
-    def __len__(self):
-        return len(self.states)
-
-    def __getitem__(self, idx):
-        state = self.states[idx]
-        policy = self.policies[idx]
-        value = self.values[idx]
-
-        if self.use_augmentation and torch.rand(1).item() > 0.5:
-             policy = policy[self.flip_mask]
-             state = torch.flip(state, dims=[-1])
-
-        return state, policy, value
-    
-
-
-
-def create_train_val_datasets(shards, train_ratio=0.9):
-
-    inputs, policies, values = [], [], []
-    
-    for shard in shards:
-        try:
-            chunk = torch.load(shard)
-            for raw_item in chunk:
-                nn_input, policy, value = get_nn_training_data(raw_item)
-                inputs.append(nn_input)
-                policies.append(policy)
-                values.append(value)
-        except Exception as e:
-            print(f"Skipping bad file {shard}: {e}")
-
-    states = torch.stack(inputs)
-    policies = torch.stack(policies)
-    values = torch.tensor(values, dtype=torch.float32).unsqueeze(1) 
-    
-    total_len = len(states)
-
-    indices = torch.randperm(total_len)
-    
-    states = states[indices]
-    policies = policies[indices]
-    values = values[indices]
-
-    train_size = int(total_len * train_ratio)
-    
-    train_states = states[:train_size]
-    train_policies = policies[:train_size]
-    train_values = values[:train_size]
-    
-    val_states = states[train_size:]
-    val_policies = policies[train_size:]
-    val_values = values[train_size:]
-
-    train_dataset = OnitamaDataset(train_states, train_policies, train_values, use_augmentation=True)
-    val_dataset = OnitamaDataset(val_states, val_policies, val_values, use_augmentation=False)
-
-    return train_dataset, val_dataset
-
-def extract_data_gen_idx(str : str):
-    try:
-        idx = int(str.strip("v").split(".")[0])
-        return idx
-    except:
-        return -1
-
-def extract_model_gen_idx(str : str):
+def extract_gen_idx(str : str):
     try:
         idx = int(str.strip("v").split(".")[0].split("_")[0])
         return idx
     except:
         return -1
     
-def extract_model_steps(str : str):
-    try:
-        idx = int(str.split(".")[0].split("_")[-1])
-        return idx
-    except:
-        return -1
-    
-def extract_positions(str : str):
+def extract_shard_idx(str : str):
     try:
         idx = int(str.split("_")[1])
         return idx
     except:
         return -1
+    
+def extract_model_steps(str : str):
+    try:
+        idx = int(str.split("_")[-1].split(".")[0])
+        return idx
+    except:
+        return 0
+    
+def extract_positions(str : str):
+    try:
+        idx = int(str.split("_")[-1].split(".")[0])
+        return idx
+    except:
+        return 0
     
 
 def get_lr_lambda(warmup_steps, milestones, gamma=0.1):
@@ -172,7 +147,147 @@ def get_lr_lambda(warmup_steps, milestones, gamma=0.1):
         return gamma ** index
 
     return lr_lambda
+
+
+
+
+def shuffle_shards(files, shuffled_shards_dir, total_positions, 
+                   max_positions_in_ram=100000, train_proportion=0.9):
+
+    remove_buffer(shuffled_shards_dir)
+        
+    os.makedirs(shuffled_shards_dir, exist_ok=True)
+    temp_dir = os.path.join(shuffled_shards_dir, "temp")
+    train_dir = os.path.join(shuffled_shards_dir, "train")
+    val_dir = os.path.join(shuffled_shards_dir, "val")
     
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(train_dir, exist_ok=True)
+    os.makedirs(val_dir, exist_ok=True)
+
+    num_shards = (total_positions - 1) // max_positions_in_ram + 1
+    
+    def create_empty_buckets():
+        return [{'states': [], 'policies': [], 'values': []} for _ in range(num_shards)]
+
+    buckets = create_empty_buckets()
+    positions_in_ram = 0
+    flush_count = 0
+
+    for filepath in tqdm(files, desc="Processing Inputs"):
+        try:
+            data = torch.load(filepath, weights_only=False)
+
+            num_items = data["states"].shape[0]
+            
+            assignments = torch.randint(0, num_shards, (num_items,))
+
+            for shard_idx in range(num_shards):
+                mask = (assignments == shard_idx)
+                
+                if mask.any():
+                    buckets[shard_idx]['states'].append(data['states'][mask])
+                    buckets[shard_idx]['policies'].append(data['policies'][mask])
+                    buckets[shard_idx]['values'].append(data['values'][mask])
+            
+            positions_in_ram += num_items
+            
+            if positions_in_ram >= max_positions_in_ram:
+                _flush_buckets_to_disk(buckets, temp_dir, flush_count)
+                buckets = create_empty_buckets()
+                positions_in_ram = 0
+                flush_count += 1
+                
+        except Exception as e:
+            print(f"Error reading {filepath}: {e}")
+
+    if positions_in_ram > 0:
+        _flush_buckets_to_disk(buckets, temp_dir, flush_count)
+
+    train_shards_paths = []
+    val_shards_paths = []
+
+    for shard_idx in tqdm(range(num_shards), desc="Finalizing Shards"):
+        part_files = glob.glob(os.path.join(temp_dir, f"shard_{shard_idx}_part_*.pt"))
+        if not part_files:
+            continue
+            
+        all_states = []
+        all_policies = []
+        all_values = []
+        
+        for part in part_files:
+            try:
+                part_data = torch.load(part, weights_only=False)
+                all_states.append(part_data['states'])
+                all_policies.append(part_data['policies'])
+                all_values.append(part_data['values'])
+            except Exception as e:
+                print(f"Error reading part {part}: {e}")
+        
+        if not all_states: continue
+            
+        merged_states = torch.cat(all_states)
+        merged_policies = torch.cat(all_policies)
+        merged_values = torch.cat(all_values)
+        
+        N = merged_states.shape[0]
+        indices = torch.randperm(N)
+        
+        merged_states = merged_states[indices]
+        merged_policies = merged_policies[indices]
+        merged_values = merged_values[indices]
+
+        split_idx = int(N * train_proportion)
+        
+        def save_split(s, p, v, path):
+            if len(s) > 0:
+                torch.save({
+                    "states": s,
+                    "policies": p,
+                    "values": v
+                }, path)
+                return path
+            return None
+
+        t_path = save_split(
+            merged_states[:split_idx], 
+            merged_policies[:split_idx], 
+            merged_values[:split_idx],
+            os.path.join(train_dir, f"shard_{shard_idx}.pt")
+        )
+        
+        v_path = save_split(
+            merged_states[split_idx:], 
+            merged_policies[split_idx:], 
+            merged_values[split_idx:],
+            os.path.join(val_dir, f"shard_{shard_idx}.pt")
+        )
+
+        if t_path: train_shards_paths.append(t_path)
+        if v_path: val_shards_paths.append(v_path)
+
+    shutil.rmtree(temp_dir)
+
+    return train_shards_paths, val_shards_paths
+
+def _flush_buckets_to_disk(buckets, temp_dir, flush_id):
+    for i, bucket_data in enumerate(buckets):
+        if len(bucket_data['states']) > 0:
+
+            cat_states = torch.cat(bucket_data['states'])
+            cat_policies = torch.cat(bucket_data['policies'])
+            cat_values = torch.cat(bucket_data['values'])
+            
+            filename = os.path.join(temp_dir, f"shard_{i}_part_{flush_id}.pt")
+            
+            torch.save({
+                "states": cat_states,
+                "policies": cat_policies,
+                "values": cat_values
+            }, filename)
+    
+
 # data v0 is generated from a random model
 # model v0 trains on data v0
 # data v1 is generated from v0
@@ -187,6 +302,8 @@ def train(args):
     model_dir = os.path.join("models", "weights", model_name)
     data_dir = os.path.join("models", "data", model_name)
     log_file = os.path.join("models", "logs", f"{model_name}.json")
+
+    remove_buffer(data_dir)
 
     os.makedirs("./models", exist_ok = True)
     os.makedirs("./models/configs", exist_ok = True)
@@ -214,16 +331,18 @@ def train(args):
     warmup_steps = train_config.get("warmup_steps", 1000)
     lr_schedule = train_config.get("lr_schedule", None)
 
+    max_positions_in_ram = config["data"].get("max_positions_in_ram", 100000)
+
     # Finds the data corresponding to new_gen:
 
     # Data directories for each generation
-    data_gens_dir = sorted(os.listdir(data_dir), key = extract_data_gen_idx)
+    data_gens_dir = sorted(os.listdir(data_dir), key = extract_gen_idx)
 
     if not data_gens_dir:
         raise(ValueError("No training data exists."))
     
     newest_data_gen_dir = data_gens_dir[-1]
-    newest_data_gen_idx = extract_data_gen_idx(newest_data_gen_dir)
+    newest_data_gen_idx = extract_gen_idx(newest_data_gen_dir)
 
     # Take the last <included_dirs_indices> generations of data : sliding window
     included_dirs_indices = min(len(data_gens_dir), include_old_gens)
@@ -241,7 +360,13 @@ def train(args):
     if not all_files:
         raise ValueError(f"No files found. Generate games before training !")
     
-    
+    # Train-test split
+    train_shards, val_shards = shuffle_shards(all_files, os.path.join(data_dir, "buffer"), 
+                                     total_positions = total_positions, 
+                                     max_positions_in_ram=max_positions_in_ram,
+                                     train_proportion=train_proportion)
+
+
     gen_key = f"v{newest_data_gen_idx}"
 
 
@@ -277,7 +402,7 @@ def train(args):
 
     # Look for the latest generation of models :
     # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
-    model_gens_files = sorted(os.listdir(model_dir), key = extract_model_gen_idx)
+    model_gens_files = sorted(os.listdir(model_dir), key = extract_gen_idx)
 
     newest_model_gen_idx = 0
     steps = 0
@@ -286,7 +411,7 @@ def train(args):
 
     else:
         newest_model_file = model_gens_files[-1]
-        newest_model_gen_idx = extract_model_gen_idx(newest_model_file)
+        newest_model_gen_idx = extract_gen_idx(newest_model_file)
         save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
         model_state_dict = save_dict["model_state_dict"]
         model.load_state_dict(model_state_dict)
@@ -310,11 +435,29 @@ def train(args):
 
 
     # Create datasets and loaders
-    train_dataset, val_dataset = create_train_val_datasets(all_files, train_ratio = 0.9)
 
-    train_loader = DataLoader(train_dataset, batch_size=64, num_workers = train_workers, shuffle=True, pin_memory=True)
+    print("Creating datasets.")
+    train_dataset = OnitamaStreamingDataset(train_shards, use_data_augmentation=use_data_augmentation)
+    val_dataset = OnitamaStreamingDataset(val_shards, use_data_augmentation=False)
 
-    val_loader = DataLoader(val_dataset, batch_size=64, num_workers = val_workers, shuffle=False, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=batch_size,  
+        num_workers=train_workers, 
+        pin_memory = True,    
+        drop_last=True,
+        persistent_workers = True
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=batch_size,    
+        num_workers=val_workers,     
+        pin_memory=True,
+        drop_last=True,
+        persistent_workers = True
+    )
+
 
 
     value_criterion = nn.MSELoss()
@@ -343,7 +486,6 @@ def train(args):
     # Training loop
     pbar = tqdm(desc=f"v{newest_data_gen_idx} training", total = total_steps)
     pbar.update(steps)
-
     while True:
         # Train
         model.train()
@@ -425,18 +567,22 @@ def train(args):
                 break
         
 
-
         if steps == total_steps:
             break
     
 
     pbar.close()
 
+    remove_buffer(data_dir)
+
+def remove_buffer(data_dir):
+    if os.path.exists(os.path.join(data_dir, "buffer")):
+        shutil.rmtree(os.path.join(data_dir, "buffer"))
 
 
 def remove_old_models(model_dir, gen_idx):
     for model_file in os.listdir(model_dir):
-        if extract_model_gen_idx(model_file) == gen_idx:
+        if extract_gen_idx(model_file) == gen_idx:
             os.remove(os.path.join(model_dir, model_file))
 
 
