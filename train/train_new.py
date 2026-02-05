@@ -15,6 +15,7 @@ from tqdm import tqdm
 from game.board_utils import create_horizontal_flip_mask
 import torch.nn.functional as F
 from bisect import bisect_right
+import shutil
 
 
 class WDLValueLoss(nn.Module):
@@ -53,80 +54,50 @@ class MaskIllegalMovesPolicyLoss(nn.Module):
         p_logits[illegal_mask] = -1.0e10
         return self.ce_loss(p_logits, clean_target)
         
-    
+
+class OnitamaStreamingDataset(IterableDataset):
+    def __init__(self, 
+                 files, 
+                 use_data_augmentation = False):
+        
+        self.files = files
+        self.use_data_augmentation = use_data_augmentation
+        if use_data_augmentation:
+            self.flip_mask = create_horizontal_flip_mask()
 
 
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        
+        if worker_info is None:
+            my_files = self.files
+        else:
+            per_worker = int(math.ceil(len(self.files) / float(worker_info.num_workers)))
+            start = worker_info.id * per_worker
+            end = min(start + per_worker, len(self.files))
+            my_files = self.files[start:end]
 
+        random.shuffle(my_files)
 
-
-
-class OnitamaDataset(Dataset):
-    def __init__(self, states, policies, values, use_augmentation=False):
-        self.states = states
-        self.policies = policies
-        self.values = values
-        self.use_augmentation = use_augmentation
-        if use_augmentation:
-            self.flip_mask = create_horizontal_flip_mask() 
-
-    def __len__(self):
-        return len(self.states)
-
-    def __getitem__(self, idx):
-        state = self.states[idx]
-        policy = self.policies[idx]
-        value = self.values[idx]
-
-        if self.use_augmentation and torch.rand(1).item() > 0.5:
-             policy = policy[self.flip_mask]
-             state = torch.flip(state, dims=[-1])
-
-        return state, policy, value
-    
-
-
-
-def create_train_val_datasets(shards, train_ratio=0.9):
-
-    inputs, policies, values = [], [], []
-    
-    for shard in shards:
-        try:
-            chunk = torch.load(shard)
-            for raw_item in chunk:
-                nn_input, policy, value = get_nn_training_data(raw_item)
-                inputs.append(nn_input)
-                policies.append(policy)
-                values.append(value)
-        except Exception as e:
-            print(f"Skipping bad file {shard}: {e}")
-
-    states = torch.stack(inputs)
-    policies = torch.stack(policies)
-    values = torch.tensor(values, dtype=torch.float32).unsqueeze(1) 
-    
-    total_len = len(states)
-
-    indices = torch.randperm(total_len)
-    
-    states = states[indices]
-    policies = policies[indices]
-    values = values[indices]
-
-    train_size = int(total_len * train_ratio)
-    
-    train_states = states[:train_size]
-    train_policies = policies[:train_size]
-    train_values = values[:train_size]
-    
-    val_states = states[train_size:]
-    val_policies = policies[train_size:]
-    val_values = values[train_size:]
-
-    train_dataset = OnitamaDataset(train_states, train_policies, train_values, use_augmentation=True)
-    val_dataset = OnitamaDataset(val_states, val_policies, val_values, use_augmentation=False)
-
-    return train_dataset, val_dataset
+        for filepath in my_files:
+            try:
+                data = torch.load(filepath)
+                
+                for raw_item in data:
+                    nn_input, policy, value = get_nn_training_data(raw_item)
+                    
+                    if self.use_data_augmentation and random.random() > 0.5:
+                        policy = policy[self.flip_mask]
+                        nn_input = torch.flip(nn_input, dims=[-1])
+                        
+                    yield (
+                        nn_input, 
+                        policy.clone().detach(), 
+                        torch.tensor(value, dtype=torch.float32)
+                    )
+                    
+            except Exception as e:
+                print(f"Corrupt shard {filepath}: {e}")
 
 def extract_data_gen_idx(str : str):
     try:
@@ -172,6 +143,39 @@ def get_lr_lambda(warmup_steps, milestones, gamma=0.1):
         return gamma ** index
 
     return lr_lambda
+
+
+def shuffle_shards(files, shuffled_shards_dir, max_ram_usage = 100000):
+
+    if os.path.exists(shuffled_shards_dir):
+        shutil.rmtree(shuffled_shards_dir)
+    os.makedirs(shuffled_shards_dir, exist_ok=True)
+
+    num_shards = len(files)
+
+    shuffled_shards = []
+
+    buckets = [[] for _ in range(num_shards)]
+
+    for filepath in tqdm(files, desc="Reading Files"):
+        try:
+            data_chunk = torch.load(filepath, weights_only = False)
+            
+            for item in data_chunk:
+                bucket_idx = random.randint(0, num_shards - 1)
+                buckets[bucket_idx].append(item)
+                
+        except Exception as e:
+            print(f"Error processing {filepath}: {e}")
+
+    for shard_idx, bucket_data in enumerate(tqdm(buckets, desc="Writing Shards")):
+            random.shuffle(bucket_data)
+            filename = os.path.join(shuffled_shards_dir, f"shuffled_positions_{shard_idx}.pt")
+            torch.save(bucket_data, filename)
+            
+            shuffled_shards.append(filename)
+
+    return(shuffled_shards)
     
 # data v0 is generated from a random model
 # model v0 trains on data v0
@@ -241,6 +245,15 @@ def train(args):
     if not all_files:
         raise ValueError(f"No files found. Generate games before training !")
     
+    # Train-test split
+    shuffled_shards = shuffle_shards(all_files, os.path.join(data_dir, "buffer"))
+
+    split_idx = int(len(shuffled_shards) * train_proportion)
+    train_files = shuffled_shards[:split_idx]
+    val_files = shuffled_shards[split_idx:]
+
+    print(f"Training on {len(train_files)} shard(s). Validating on {len(val_files)} shard(s).")
+
     
     gen_key = f"v{newest_data_gen_idx}"
 
@@ -310,11 +323,27 @@ def train(args):
 
 
     # Create datasets and loaders
-    train_dataset, val_dataset = create_train_val_datasets(all_files, train_ratio = 0.9)
 
-    train_loader = DataLoader(train_dataset, batch_size=64, num_workers = train_workers, shuffle=True, pin_memory=True)
+    print("Creating datasets.")
+    train_dataset = OnitamaStreamingDataset(train_files, use_data_augmentation=use_data_augmentation)
+    val_dataset = OnitamaStreamingDataset(val_files, use_data_augmentation=False)
 
-    val_loader = DataLoader(val_dataset, batch_size=64, num_workers = val_workers, shuffle=False, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=batch_size,  
+        num_workers=train_workers, 
+        pin_memory = True,    
+        drop_last=True
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=batch_size,    
+        num_workers=val_workers,     
+        pin_memory=True,
+        drop_last=True
+    )
+
 
 
     value_criterion = nn.MSELoss()
@@ -343,7 +372,6 @@ def train(args):
     # Training loop
     pbar = tqdm(desc=f"v{newest_data_gen_idx} training", total = total_steps)
     pbar.update(steps)
-
     while True:
         # Train
         model.train()
@@ -425,12 +453,16 @@ def train(args):
                 break
         
 
-
         if steps == total_steps:
             break
     
 
     pbar.close()
+
+    if os.path.exists(train_buffer):
+        shutil.rmtree(train_buffer)
+    if os.path.exists(val_buffer):
+        shutil.rmtree(val_buffer)
 
 
 

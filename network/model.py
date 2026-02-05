@@ -51,9 +51,11 @@ class OnitamaNet(nn.Module):
         )
 
         self.policy_conv = nn.Conv2d(self.num_channels, self.pol_channels, kernel_size=1) 
+        self.policy_bn = nn.BatchNorm2d(self.pol_channels)
         self.policy_fc = nn.Linear(self.pol_channels * self.board_size * self.board_size, self.action_size)
 
         self.value_conv = nn.Conv2d(self.num_channels, self.val_channels, kernel_size=1) 
+        self.value_bn = nn.BatchNorm2d(self.val_channels)
         self.value_fc1 = nn.Linear(self.val_channels * self.board_size * self.board_size, self.val_hidden)
 
         if self.wdl:
@@ -65,11 +67,11 @@ class OnitamaNet(nn.Module):
         x = self.conv_input(x)
         x = self.res_tower(x)
 
-        p = F.relu(self.policy_conv(x))
+        p = F.relu(self.policy_bn(self.policy_conv(x)))
         p = self.flatten(p) 
         p = self.policy_fc(p)
 
-        v = F.relu(self.value_conv(x))
+        v = F.relu(self.policy_bn(self.value_conv(x)))
         v = self.flatten(v)
         v = F.relu(self.value_fc1(v))
         v = self.value_fc2(v)

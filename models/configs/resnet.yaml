@@ -6,10 +6,10 @@ model:
   board_size: 5           
   action_space_size: 1252
   policy_head_channels : 16
-  value_head_channels : 32
+  value_head_channels : 16
   value_head_hidden: 128
   dropout: 0.0
-  keep_latest: 20
+  keep_latest: 10
   wdl : false
 
 training:
@@ -25,28 +25,19 @@ training:
   weight_decay: 0.0001
   batch_size: 64
   train_proportion: 0.9
-  include_old_gens: 5
+  include_old_gens: 10
   momentum: 0.9
   nesterov: true
   use_data_augmentation: true
-  mask_illegal_moves: false
-
+  mask_illegal_moves: true
 
 data:
-  total_positions: 20000
-<<<<<<< Updated upstream
-  positions_per_shard: 5000
+  total_positions: 100000
+  positions_per_shard: 20000
   batch_size : 64
 
 mcts:
-  simulations: 50
-=======
-  positions_per_shard: 10000
-  batch_size : 64
-
-mcts:
-  simulations: 500
->>>>>>> Stashed changes
+  simulations: 100
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0
