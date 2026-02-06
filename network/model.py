@@ -3,6 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 
+
+
+class SEBlock(nn.Module):
+    "credits: https://github.com/moskomule/senet.pytorch/blob/master/senet/se_module.py#L4"
+    def __init__(self, num_channels, se_factor):
+        super().__init__()
+        self.squeeze = nn.AdaptiveAvgPool2d(1)
+        self.excitation = nn.Sequential(
+            nn.Linear(num_channels, num_channels // se_factor, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(num_channels // se_factor, num_channels, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        bs, c, _, _ = x.shape
+        y = self.squeeze(x).view(bs, c)
+        y = self.excitation(y).view(bs, c, 1, 1)
+        return x * y.expand_as(x)
+
 class ResBlock(nn.Module):
     def __init__(self, num_channels):
         super().__init__()
@@ -17,6 +37,24 @@ class ResBlock(nn.Module):
         out += x
         out = F.relu(out)
         return out
+    
+class SEResBlock(nn.Module):
+    def __init__(self, num_channels, se_factor):
+        super().__init__()
+        self.conv1 = nn.Conv2d(num_channels, num_channels, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(num_channels)
+        self.conv2 = nn.Conv2d(num_channels, num_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(num_channels)
+        self.se = SEBlock(num_channels, se_factor)
+
+    def forward(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.se(out)
+        out += x
+        out = F.relu(out)
+        return out
+    
     
 class ScalarValueHead(nn.Module):
     def __init__(self, val_hidden):
@@ -42,13 +80,26 @@ class OnitamaNet(nn.Module):
         self.val_channels = model_config.get('value_head_channels', 32)
         self.val_hidden = model_config.get('value_head_hidden', 128)
         self.wdl = model_config.get('wdl', False)
+        self.use_se = model_config.get('use_se', False)
+
+        self.se_factor = model_config.get('se_factor', 2)
+
+
+
         self.flatten = nn.Flatten()
         
         self.conv_input = nn.Conv2d(self.input_planes, self.num_channels, kernel_size=1)
         
-        self.res_tower = nn.Sequential(
-            *[ResBlock(self.num_channels) for _ in range(self.num_res_blocks)]
-        )
+        res_tower = []
+
+        for _ in range(self.num_res_blocks):
+            if self.use_se:
+                res_tower.append(SEResBlock(self.num_channels, self.se_factor))
+            else:
+                res_tower.append(ResBlock(self.num_channels))
+
+
+        self.res_tower = nn.Sequential(*res_tower)
 
         self.policy_conv = nn.Conv2d(self.num_channels, self.pol_channels, kernel_size=1) 
         self.policy_bn = nn.BatchNorm2d(self.pol_channels)

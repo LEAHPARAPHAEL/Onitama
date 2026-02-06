@@ -1,12 +1,12 @@
 model:
-  name: "resnet_6_96"
-  num_res_blocks: 6 
-  num_channels: 96        
+  name: "resnet_300"
+  num_res_blocks: 4 
+  num_channels: 64        
   input_planes: 9        
   board_size: 5           
   action_space_size: 1252
-  policy_head_channels : 32
-  value_head_channels : 32
+  policy_head_channels : 16
+  value_head_channels : 16
   value_head_hidden: 128
   dropout: 0.0
   keep_latest: 10
@@ -34,13 +34,13 @@ training:
   val_workers: 2
 
 data:
-  total_positions: 100000
+  total_positions: 50000
   positions_per_shard: 10000
   max_positions_in_ram: 100000
   batch_size : 64
 
 mcts:
-  simulations: 100
+  simulations: 300
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0

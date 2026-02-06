@@ -1,5 +1,5 @@
 model:
-  name: "resnet_6_96"
+  name: "se_net"
   num_res_blocks: 6 
   num_channels: 96        
   input_planes: 9        
@@ -7,10 +7,12 @@ model:
   action_space_size: 1252
   policy_head_channels : 32
   value_head_channels : 32
-  value_head_hidden: 128
+  value_head_hidden: 256
   dropout: 0.0
   keep_latest: 10
   wdl : false
+  use_se: true
+  se_factor: 2
 
 training:
   epochs: 10
