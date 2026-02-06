@@ -1,5 +1,5 @@
 model:
-  name: "resnet_4_64"
+  name: "resnet_no_mask"
   num_res_blocks: 4 
   num_channels: 64        
   input_planes: 9        
@@ -29,7 +29,7 @@ training:
   momentum: 0.9
   nesterov: true
   use_data_augmentation: true
-  mask_illegal_moves: true
+  mask_illegal_moves: false
   train_workers: 2
   val_workers: 2
 

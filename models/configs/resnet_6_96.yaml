@@ -1,12 +1,12 @@
 model:
-  name: "resnet_4_64"
-  num_res_blocks: 4 
-  num_channels: 64        
+  name: "resnet_6_96"
+  num_res_blocks: 6 
+  num_channels: 96        
   input_planes: 9        
   board_size: 5           
   action_space_size: 1252
-  policy_head_channels : 16
-  value_head_channels : 16
+  policy_head_channels : 32
+  value_head_channels : 32
   value_head_hidden: 128
   dropout: 0.0
   keep_latest: 10
@@ -23,7 +23,7 @@ training:
   lr_schedule : [4, 8]
 
   weight_decay: 0.0001
-  batch_size: 64
+  batch_size: 256
   train_proportion: 0.9
   include_old_gens: 10
   momentum: 0.9
