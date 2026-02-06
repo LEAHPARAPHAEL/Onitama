@@ -1,0 +1,51 @@
+model:
+  name: "resnet_wdl"
+  num_res_blocks: 4 
+  num_channels: 64        
+  input_planes: 9        
+  board_size: 5           
+  action_space_size: 1252
+  policy_head_channels : 16
+  value_head_channels : 16
+  value_head_hidden: 128
+  dropout: 0.0
+  keep_latest: 10
+  wdl : true
+
+training:
+  epochs: 10
+  total_steps : null
+  checkpoint_steps: null
+  test_steps: null
+  warmup_steps: 1000
+
+  learning_rate: 0.01
+  lr_schedule : [4, 8]
+
+  weight_decay: 0.0001
+  batch_size: 64
+  train_proportion: 0.9
+  include_old_gens: 10
+  momentum: 0.9
+  nesterov: true
+  use_data_augmentation: true
+  mask_illegal_moves: true
+ 
+  train_workers: 2
+  val_workers: 2
+
+data:
+  total_positions: 50000
+  positions_per_shard: 10000
+  max_positions_in_ram: 100000
+  batch_size : 64
+
+mcts:
+  simulations: 50
+  c_puct: 1.0
+  lower_temperature_after : 10
+  high_temperature: 1.0
+  low_temperature: 0.0
+
+
+generations: 20

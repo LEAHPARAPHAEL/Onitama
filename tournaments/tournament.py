@@ -9,6 +9,7 @@ import itertools
 from game.board_utils import get_5_cards_with_fixed_start
 from tqdm import tqdm
 from game.board import Board
+import torch.nn.functional as F
 
 def extract_model_gen_idx(str : str):
     try:
@@ -20,6 +21,10 @@ def extract_model_gen_idx(str : str):
 def tournament(args):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    os.makedirs("tournaments", exist_ok = True)
+    os.makedirs("tournaments/configs", exist_ok = True)
+    os.makedirs("tournaments/logs", exist_ok = True)
 
     config = yaml.safe_load(open(os.path.join("tournaments", "configs", args.config), "r"))
 
@@ -99,6 +104,8 @@ def tournament(args):
 
         config1 = yaml.safe_load(open(config_file1, "r"))
         config2 = yaml.safe_load(open(config_file2, "r"))
+        mask1 = config1["training"].get("mask_illegal_moves", False)
+        mask2 = config2["training"].get("mask_illegal_moves", False)
 
         model1 = OnitamaNet(config1).to(device)
         model2 = OnitamaNet(config2).to(device)
@@ -128,7 +135,7 @@ def tournament(args):
 
         while played_games < rounds:
 
-            for (m1, m2, mcts) in [(c1, c2, mcts1), (c2, c1, mcts2)] :
+            for (m1, m2, mcts, mask) in [(c1, c2, mcts1, mask1), (c2, c1, mcts2, mask2)] :
 
                 while start_indices[m1] < half_round and indices_to_replace:
                     idx_to_replace = indices_to_replace.pop()
@@ -144,6 +151,8 @@ def tournament(args):
 
                     policy = policies[i]
                     
+                    if mask:
+                        policy = F.relu(policy)
                     action_idx = torch.multinomial(policy, 1).item()
                     move = board.action_index_to_move(action_idx)
 

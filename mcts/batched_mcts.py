@@ -8,10 +8,21 @@ class BatchedMCTS:
     def __init__(self, model, config, device):
         self.model = model
         self.model.eval()
-        self.num_simulations = config.get('simulations', 100)
-        self.temperature = config.get('temperature', 0.05)
-        self.inverse_temperature = 1. / self.temperature
-        self.c_puct = config.get('c_puct', 1.0)
+        mcts_config = config['mcts']
+        self.num_simulations = mcts_config.get('simulations', 100)
+
+        self.high_temperature = mcts_config.get('high_temperature', 1.0)
+        self.low_temperature = mcts_config.get('low_temperature', 0.0)
+
+        self.lower_temperature_after = mcts_config.get('lower_temperature_after', 10)
+        self.c_puct = mcts_config.get('c_puct', 1.0)
+
+        mask_illegal_moves = config['training'].get('mask_illegal_moves', False)
+        if mask_illegal_moves:
+            self.policy_default = -1.0
+        else:
+            self.policy_default = 0.0
+
         self.device = device
 
     def search_batch(self, boards):
@@ -64,7 +75,14 @@ class BatchedMCTS:
                 logits, values = self.model(input_batch)
             
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
-            values_batch = values.cpu().numpy()
+
+            if self.model.wdl:
+                wdl_probs = torch.softmax(values, dim=1)
+                values_scalar = wdl_probs[:, 2] - wdl_probs[:, 0]
+                values_batch = values_scalar.cpu().numpy()
+
+            else:
+                values_batch = values.cpu().numpy()
 
             for j, game_idx in enumerate(valid_indices):
                 node = leaf_nodes[j]
@@ -95,14 +113,25 @@ class BatchedMCTS:
                 policies.append(None)
                 continue
 
-            total_visits = sum(c.visit_count ** self.inverse_temperature for c in root.children.values())
-            probs = torch.zeros(1252) 
-            
-            if total_visits > 0:
-                for action_idx, child in root.children.items():
-                    probs[action_idx] = (child.visit_count ** self.inverse_temperature) / total_visits
+            probs = torch.full((1252,), self.policy_default, dtype=torch.float32)
+
+            if boards[k].turn_count >= self.lower_temperature_after:
+                temperature = self.low_temperature
             else:
-                probs[0] = 1.0 
+                temperature = self.high_temperature
+
+            if temperature == 0:
+                best_action_idx = max(root.children, key=lambda k: root.children[k].visit_count)
+                probs[best_action_idx] = 1.0
+
+            else:
+                total_visits = sum(c.visit_count ** temperature for c in root.children.values())
+                
+                assert(total_visits != 0)
+
+                for action_idx, child in root.children.items():
+                    probs[action_idx] = (child.visit_count ** temperature) / total_visits
+
                 
             policies.append(probs)
             
