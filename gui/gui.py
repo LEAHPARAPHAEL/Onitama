@@ -24,13 +24,14 @@ def extract_gen_idx(str : str):
 # ==========================================
 # 1. CONFIGURATION & VISUAL CONSTANTS
 # ==========================================
-WINDOW_WIDTH, WINDOW_HEIGHT = 1200, 700 # Increased window size for larger cards
-SQUARE_SIZE = 90
-BOARD_OFFSET_X, BOARD_OFFSET_Y = 100, 200 # Centered board
+# SCALED DOWN DIMENSIONS (Height 850 -> 700)
+WINDOW_WIDTH, WINDOW_HEIGHT = 990, 700 
+SQUARE_SIZE = 74
+BOARD_OFFSET_X, BOARD_OFFSET_Y = 82, 165
 
 # Card Dimensions
-CARD_W, CARD_H = 200, 200 
-CARD_MINI_GRID = 28 # Size of small squares in card pattern
+CARD_W, CARD_H = 165, 165 
+CARD_MINI_GRID = 23 
 
 # Colors
 C_BG = (245, 240, 225)
@@ -135,10 +136,11 @@ class OnitamaGUI:
         pygame.display.set_caption("Onitama AlphaZero")
         self.clock = pygame.time.Clock()
         
-        self.font = pygame.font.SysFont('Segoe UI', 16)
-        self.bold_font = pygame.font.SysFont('Segoe UI', 18, bold=True)
-        self.title_font = pygame.font.SysFont('Segoe UI', 32, bold=True)
-        self.large_font = pygame.font.SysFont('Segoe UI', 48, bold=True)
+        # Scaled Fonts
+        self.font = pygame.font.SysFont('Segoe UI', 13)
+        self.bold_font = pygame.font.SysFont('Segoe UI', 15, bold=True)
+        self.title_font = pygame.font.SysFont('Segoe UI', 26, bold=True)
+        self.large_font = pygame.font.SysFont('Segoe UI', 40, bold=True)
         
         self.model_manager = ModelManager()
         self.model_manager.scan_models()
@@ -154,7 +156,8 @@ class OnitamaGUI:
         self.menu_card_assignments = {i: None for i in range(16)}
         self.menu_mcts_sims = 800
         self.slider_dragging = False
-        self.slider_rect = pygame.Rect(400, 520, 200, 20)
+        # Initial placeholder, updated in draw_menu/handle_input
+        self.slider_rect = pygame.Rect(330, 430, 165, 16) 
         
         # Game Data
         self.selected_card_slot = None
@@ -197,8 +200,6 @@ class OnitamaGUI:
             pygame.display.flip()
             self.clock.tick(60)
 
-
-
     def update_slider_value(self, mouse_x):
         # Clamp mouse x to slider width
         min_x = self.slider_rect.left
@@ -239,7 +240,6 @@ class OnitamaGUI:
             print(f"Error instantiating Board: {e}")
 
 
-    # [Rest of methods: cycle_card_assignment, can_start_game, handle_ai_turn, etc. remain as before]
     def cycle_card_assignment(self, card_id):
         current_state = self.menu_card_assignments[card_id]
         counts = {'blue': 0, 'red': 0, 'side': 0}
@@ -271,9 +271,6 @@ class OnitamaGUI:
             elif v == 'side': s_count += 1
         return b_count == 2 and r_count == 2 and s_count == 1
 
-
-
-
     def handle_game_input(self, event):
         # Allow input only if it is Human's Turn
         is_human_turn = (self.board.turn == self.human_is_blue)
@@ -301,9 +298,6 @@ class OnitamaGUI:
                     vis_idx = r * 5 + c
                     
                     # Logic Index mapping
-                    # Because we rotate visuals 180 if it's NOT human turn, 
-                    # but here we are inside "is_human_turn", visuals match logic 1:1.
-                    # Human is at bottom -> Logic is at bottom -> No Flip.
                     logic_idx = vis_idx
 
                     is_own = ((self.board.player_disciples >> logic_idx) & 1) or \
@@ -335,7 +329,7 @@ class OnitamaGUI:
             self.selected_piece_idx = None
             self.valid_targets = []
 
-    # --- PERSPECTIVE FIX IN DRAW_GAME ---
+    # --- PERSPECTIVE FIX IN DRAW_GAME (SCALED) ---
     def draw_game(self):
         # Grid
         for r in range(5):
@@ -345,51 +339,41 @@ class OnitamaGUI:
                 if (r==0 or r==4) and c==2: pygame.draw.rect(self.screen, (220, 210, 190), rect)
 
         # Pieces
-        # Logic: Board flips internally. Current Player always at Logic Bottom.
-        # Visual: Human always at Visual Bottom.
         is_human_turn = (self.board.turn == self.human_is_blue)
         should_rotate = not is_human_turn
 
         def get_rot(b): return int(f"{b:025b}"[::-1], 2)
 
-        # Logic: Player (Bot), Opp (Top)
         pb, mb = self.board.player_disciples, self.board.player_master
         ob, om = self.board.opponent_disciples, self.board.opponent_master
 
         if should_rotate:
-            # AI Turn. AI is Logic Player. Rotate it to Visual Top.
             self._draw_bits(get_rot(pb), get_rot(mb), C_P2 if self.human_is_blue else C_P1)
             self._draw_bits(get_rot(ob), get_rot(om), C_P1 if self.human_is_blue else C_P2)
         else:
-            # Human Turn. Human is Logic Player. Keep at Visual Bottom.
             self._draw_bits(pb, mb, C_P1 if self.human_is_blue else C_P2)
             self._draw_bits(ob, om, C_P2 if self.human_is_blue else C_P1)
 
         # Cards
-        # Layout positions (Larger cards)
-        # Top Row (AI): Y=20. Bottom Row (Human): Y=BOARD_OFFSET_Y + 5*SQ + 20 = 200 + 450 + 20 = 670.
-        ai_y = 70
-        hum_y = 580
+        # Scaled Y Positions
+        ai_y = 58  
+        hum_y = 478 
         
-        # Side Card: Right of board (X > 100+450). Centered vertically (425).
-        side_x, side_y = 750, 320
+        # Side Card Scaled
+        side_x, side_y = 618, 263
 
-        # Assign logic cards
         if is_human_turn:
             hum_c, ai_c = self.board.player_cards, self.board.opponent_cards
         else:
             hum_c, ai_c = self.board.opponent_cards, self.board.player_cards
 
-        # Draw Cards
-        # Opponent (Top) - Rotated Patterns
-        self.render_card(ai_c[0], 630, ai_y, False, rotate_pattern=True)
-        self.render_card(ai_c[1], 880, ai_y, False, rotate_pattern=True)
+        # Draw Cards (Scaled X positions)
+        self.render_card(ai_c[0], 519, ai_y, False, rotate_pattern=True)
+        self.render_card(ai_c[1], 725, ai_y, False, rotate_pattern=True)
         
-        # Player (Bottom)
-        self.render_card(hum_c[0], 630, hum_y, True, "p1_card_0")
-        self.render_card(hum_c[1], 880, hum_y, True, "p1_card_1")
+        self.render_card(hum_c[0], 519, hum_y, True, "p1_card_0")
+        self.render_card(hum_c[1], 725, hum_y, True, "p1_card_1")
         
-        # Side
         self.render_card(self.board.side_card, side_x, side_y, True, "side")
 
         # Selection/Target Highlights
@@ -401,10 +385,8 @@ class OnitamaGUI:
         for t in self.valid_targets:
             vis = t if not should_rotate else 24 - t
             r, c = vis // 5, vis % 5
-            cx = BOARD_OFFSET_X + c*SQUARE_SIZE + SQUARE_SIZE//2
-            cy = BOARD_OFFSET_Y + r*SQUARE_SIZE + SQUARE_SIZE//2
             s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-            pygame.draw.circle(s, (100,255,100,100), (SQUARE_SIZE//2, SQUARE_SIZE//2), 15)
+            pygame.draw.circle(s, (100,255,100,100), (SQUARE_SIZE//2, SQUARE_SIZE//2), 12) # Scaled radius
             self.screen.blit(s, (BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE))
 
     def draw_gameover(self):
@@ -413,42 +395,31 @@ class OnitamaGUI:
         overlay.fill(C_OVERLAY)
         self.screen.blit(overlay, (0,0))
         
-        # Determine Result
-        # Logic: Board.play_move sets result=-1 if the move wins.
-        # Then it flips the turn. 
-        # So if result == -1, the player whose turn it is NOW has lost.
-        
         if self.board.result == -1:
-            # The current turn holder lost.
-            # If it's Human's turn now, Human lost.
             if self.board.turn == self.human_is_blue:
                 msg = "YOU LOST"
-                color = (255, 100, 100) # Reddish
+                color = (255, 100, 100)
             else:
                 msg = "YOU WON!"
-                color = (100, 255, 100) # Greenish
+                color = (100, 255, 100)
         else:
-            # Result is 0 but game is over -> Repetition Draw
             msg = "DRAW (Repetition)"
             color = (200, 200, 255)
 
         # Draw Text
         txt = self.large_font.render(msg, True, color)
-        # Add a black outline for contrast
         outline = self.large_font.render(msg, True, (0,0,0))
         
-        rc = txt.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 50))
-        # Blit outline slightly offset
+        rc = txt.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 40))
         self.screen.blit(outline, (rc.x-2, rc.y-2))
         self.screen.blit(outline, (rc.x+2, rc.y+2))
         self.screen.blit(txt, rc)
         
-        # New Game Button
-        btn_w, btn_h = 240, 70
+        # New Game Button (Scaled)
+        btn_w, btn_h = 200, 58
         bx = (WINDOW_WIDTH - btn_w) // 2
-        by = (WINDOW_HEIGHT - btn_h) // 2 + 50
+        by = (WINDOW_HEIGHT - btn_h) // 2 + 40
         
-        # Button hover effect
         if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(pygame.mouse.get_pos()):
             b_col = (90, 180, 90)
         else:
@@ -461,8 +432,6 @@ class OnitamaGUI:
         brc = btxt.get_rect(center=(bx + btn_w//2, by + btn_h//2))
         self.screen.blit(btxt, brc)
 
-
-
     def _draw_bits(self, pawns, master, color):
         for i in range(25):
             if (pawns >> i) & 1: self._draw_circ(i, color, False)
@@ -472,17 +441,18 @@ class OnitamaGUI:
         r, c = i // 5, i % 5
         cx = BOARD_OFFSET_X + c*SQUARE_SIZE + SQUARE_SIZE//2
         cy = BOARD_OFFSET_Y + r*SQUARE_SIZE + SQUARE_SIZE//2
-        radius = 32 if is_master else 22
+        # Scaled Radii
+        radius = 26 if is_master else 18
         pygame.draw.circle(self.screen, color, (cx, cy), radius)
-        if is_master: pygame.draw.circle(self.screen, (255, 215, 0), (cx, cy), radius-4, 3)
+        if is_master: pygame.draw.circle(self.screen, (255, 215, 0), (cx, cy), radius-3, 2)
 
 
     def handle_menu_input(self, event):
-        # Layout constants matching draw_menu for consistent hitboxes
-        PANEL_Y = 120
-        L_CX = 425  # Center X for left panel controls
-        R_PANEL_X = 700 # Left edge of right panel
-        R_CX = 850 # Center X for right panel elements
+        # SCALED LAYOUT CONSTANTS
+        PANEL_Y = 100
+        L_CX = 350
+        R_PANEL_X = 580
+        R_CX = 705
 
         if event.type == pygame.MOUSEMOTION and self.slider_dragging:
             self.update_slider_value(event.pos[0]); return
@@ -493,77 +463,65 @@ class OnitamaGUI:
             pos = event.pos
             
             # --- LEFT PANEL CONTROLS ---
-            # 1. Color Toggle (Centered at L_CX)
-            # Rect: (L_CX - 100, PANEL_Y, 200, 40)
-            if pygame.Rect(L_CX - 100, PANEL_Y, 200, 40).collidepoint(pos):
+            # 1. Color Toggle
+            if pygame.Rect(L_CX - 82, PANEL_Y, 164, 32).collidepoint(pos):
                 self.human_is_blue = not self.human_is_blue
                 return
 
-            # 2. Slider (Below toggle)
-            # Rect: (L_CX - 125, PANEL_Y + 80, 250, 20)
-            slider_hitbox = pygame.Rect(L_CX - 125, PANEL_Y + 80, 250, 20).inflate(10, 20)
+            # 2. Slider
+            slider_hitbox = pygame.Rect(L_CX - 100, PANEL_Y + 65, 200, 16).inflate(10, 20)
             if slider_hitbox.collidepoint(pos):
                 self.slider_dragging = True
-                # Update ref for drag function relative to new position
-                self.slider_rect = pygame.Rect(L_CX - 125, PANEL_Y + 80, 250, 20) 
+                self.slider_rect = pygame.Rect(L_CX - 100, PANEL_Y + 65, 200, 16) 
                 self.update_slider_value(pos[0])
                 return
 
-            # 3. Random Checkbox (Below slider)
-            # Rect: (L_CX - 100, PANEL_Y + 130, 200, 40)
-            if pygame.Rect(L_CX - 100, PANEL_Y + 130, 200, 40).collidepoint(pos):
+            # 3. Random Checkbox
+            if pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32).collidepoint(pos):
                 self.menu_random_cards = not self.menu_random_cards
                 if self.menu_random_cards: self.menu_card_assignments = {i: None for i in range(16)}
                 return
 
-            # 4. Card Grid (Below checkbox)
+            # 4. Card Grid
             if not self.menu_random_cards:
-                # Grid total width is 440. Centered at L_CX. Start X = L_CX - 220.
-                start_x = L_CX - 220
-                start_y = PANEL_Y + 190
+                start_x = L_CX - 180
+                start_y = PANEL_Y + 156
                 for i in range(16):
                     r, c = i // 4, i % 4
-                    cx, cy = start_x + c * 110, start_y + r * 60
-                    if pygame.Rect(cx, cy, 100, 50).collidepoint(pos):
+                    cx, cy = start_x + c * 90, start_y + r * 50
+                    if pygame.Rect(cx, cy, 82, 40).collidepoint(pos):
                         self.cycle_card_assignment(i); return
 
             # --- RIGHT PANEL MODELS & START ---
             # 5. Model List
-            # Rect: (R_PANEL_X, PANEL_Y, 300, 400)
-            if pygame.Rect(R_PANEL_X, PANEL_Y, 300, 400).collidepoint(pos):
-                idx = (pos[1] - PANEL_Y) // 40
+            if pygame.Rect(R_PANEL_X, PANEL_Y, 250, 330).collidepoint(pos):
+                idx = (pos[1] - PANEL_Y) // 32
                 if 0 <= idx < len(self.model_manager.available_models):
                     self.menu_selected_model_idx = idx
                 return
 
-            # 6. Start Button (Below model list, centered at R_CX)
-            # Rect: (R_CX - 100, PANEL_Y + 420, 200, 60)
-            if pygame.Rect(R_CX - 100, PANEL_Y + 420, 200, 60).collidepoint(pos):
+            # 6. Start Button
+            if pygame.Rect(R_CX - 82, PANEL_Y + 345, 164, 50).collidepoint(pos):
                 if self.can_start_game(): self.start_game()
                 return
 
     def draw_menu(self):
-        # Layout Constants to achieve centered look with balanced margins
-        # Window width 1200. Roughly 200px margin on each side.
-        PANEL_Y = 120 # Top Y coordinate for panel elements
-        
-        # Left Panel (Controls): Center X = 425
-        L_CX = 425 
-        
-        # Right Panel (Models): Starts at X=700, Width=300. Center X = 850.
-        R_PANEL_X = 700
-        R_PANEL_W = 300
+        # SCALED LAYOUT CONSTANTS
+        PANEL_Y = 100
+        L_CX = 350
+        R_PANEL_X = 580
+        R_PANEL_W = 250
         R_CX = R_PANEL_X + R_PANEL_W // 2
 
         # Main Title
         title = self.title_font.render("Onitama Setup", True, C_MENU_BG)
-        self.screen.blit(title, title.get_rect(center=(WINDOW_WIDTH//2, 50)))
+        self.screen.blit(title, title.get_rect(center=(WINDOW_WIDTH//2, 40)))
 
         # --- LEFT PANEL: CONTROLS ---
         
         # 1. Player Color Toggle
         col_c = C_P1 if self.human_is_blue else C_P2
-        tog_rect = pygame.Rect(L_CX - 100, PANEL_Y, 200, 40)
+        tog_rect = pygame.Rect(L_CX - 82, PANEL_Y, 164, 32)
         pygame.draw.rect(self.screen, col_c, tog_rect, border_radius=5)
         pygame.draw.rect(self.screen, (0,0,0), tog_rect, 2, border_radius=5)
         lbl = f"Human: {'BLUE' if self.human_is_blue else 'RED'}"
@@ -572,62 +530,61 @@ class OnitamaGUI:
 
         # 2. Simulations Slider
         sim_lbl = self.bold_font.render(f"AI Simulations: {self.menu_mcts_sims}", True, C_TEXT)
-        self.screen.blit(sim_lbl, sim_lbl.get_rect(center=(L_CX, PANEL_Y + 60)))
+        self.screen.blit(sim_lbl, sim_lbl.get_rect(center=(L_CX, PANEL_Y + 48)))
         
-        self.slider_rect = pygame.Rect(L_CX - 125, PANEL_Y + 80, 250, 20)
-        pygame.draw.rect(self.screen, (200,200,200), self.slider_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (100,100,100), self.slider_rect, 2, border_radius=10)
+        self.slider_rect = pygame.Rect(L_CX - 100, PANEL_Y + 65, 200, 16)
+        pygame.draw.rect(self.screen, (200,200,200), self.slider_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (100,100,100), self.slider_rect, 2, border_radius=8)
         ratio = (self.menu_mcts_sims - 50)/(1500-50)
         kx = self.slider_rect.left + ratio * self.slider_rect.width
-        pygame.draw.circle(self.screen, C_MENU_BG, (int(kx), int(self.slider_rect.centery)), 10)
+        pygame.draw.circle(self.screen, C_MENU_BG, (int(kx), int(self.slider_rect.centery)), 8)
 
         # 3. Random Cards Checkbox
-        rnd_rect = pygame.Rect(L_CX - 100, PANEL_Y + 130, 200, 40)
-        cb_rect = pygame.Rect(rnd_rect.x, rnd_rect.centery - 10, 20, 20)
+        rnd_rect = pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32)
+        cb_rect = pygame.Rect(rnd_rect.x, rnd_rect.centery - 8, 16, 16)
         pygame.draw.rect(self.screen, (255,255,255), cb_rect)
         pygame.draw.rect(self.screen, (0,0,0), cb_rect, 2)
         if self.menu_random_cards: 
-            pygame.draw.rect(self.screen, (50,50,50), cb_rect.inflate(-6,-6))
+            pygame.draw.rect(self.screen, (50,50,50), cb_rect.inflate(-4,-4))
         rnd_txt = self.font.render("Random Cards", True, C_TEXT)
-        self.screen.blit(rnd_txt, (cb_rect.right + 10, cb_rect.y))
+        self.screen.blit(rnd_txt, (cb_rect.right + 8, cb_rect.y - 2))
 
         # 4. Card Grid
         if not self.menu_random_cards:
-            start_x = L_CX - 220 # Center the 440px wide grid
-            start_y = PANEL_Y + 190
+            start_x = L_CX - 180
+            start_y = PANEL_Y + 156
             for i in range(16):
                 r, c = i//4, i%4
-                cx, cy = start_x + c*110, start_y + r*60
+                cx, cy = start_x + c*90, start_y + r*50
                 asn = self.menu_card_assignments[i]
                 bg = (180,200,255) if asn=='blue' else (255,180,180) if asn=='red' else (200,200,200) if asn=='side' else (240,240,240)
-                pygame.draw.rect(self.screen, bg, (cx,cy,100,50), border_radius=4)
-                pygame.draw.rect(self.screen, (100,100,100), (cx,cy,100,50), 1, border_radius=4)
+                pygame.draw.rect(self.screen, bg, (cx,cy,82,40), border_radius=4)
+                pygame.draw.rect(self.screen, (100,100,100), (cx,cy,82,40), 1, border_radius=4)
                 c_name = CARDS[i]['name']
                 if len(c_name) > 10: c_name = c_name[:9] + "."
-                self.screen.blit(self.font.render(c_name, True, C_TEXT), (cx+5, cy+15))
+                self.screen.blit(self.font.render(c_name, True, C_TEXT), (cx+4, cy+12))
 
         # --- RIGHT PANEL: MODELS & START ---
         
         # Title for model list
         mod_title = self.bold_font.render("Choose your opponent", True, C_TEXT)
-        self.screen.blit(mod_title, (R_PANEL_X, PANEL_Y - 30))
+        self.screen.blit(mod_title, (R_PANEL_X, PANEL_Y - 24))
 
         # Model List
-        pygame.draw.rect(self.screen, (230,230,230), (R_PANEL_X, PANEL_Y, R_PANEL_W, 400))
-        pygame.draw.rect(self.screen, (0,0,0), (R_PANEL_X, PANEL_Y, R_PANEL_W, 400), 2)
+        pygame.draw.rect(self.screen, (230,230,230), (R_PANEL_X, PANEL_Y, R_PANEL_W, 330))
+        pygame.draw.rect(self.screen, (0,0,0), (R_PANEL_X, PANEL_Y, R_PANEL_W, 330), 2)
         for i, m in enumerate(self.model_manager.available_models):
-            y = PANEL_Y + i*40
-            # Ensure we don't draw outside the box if too many models
-            if y + 40 > PANEL_Y + 400: break 
+            y = PANEL_Y + i*32
+            # Ensure we don't draw outside the box
+            if y + 32 > PANEL_Y + 330: break 
             col = (180,220,255) if i == self.menu_selected_model_idx else (255,255,255)
-            pygame.draw.rect(self.screen, col, (R_PANEL_X, y, R_PANEL_W, 40))
-            pygame.draw.rect(self.screen, (200,200,200), (R_PANEL_X, y, R_PANEL_W, 40), 1)
-            self.screen.blit(self.font.render(m.get('name','?'), True, C_TEXT), (R_PANEL_X + 10, y+10))
+            pygame.draw.rect(self.screen, col, (R_PANEL_X, y, R_PANEL_W, 32))
+            pygame.draw.rect(self.screen, (200,200,200), (R_PANEL_X, y, R_PANEL_W, 32), 1)
+            self.screen.blit(self.font.render(m.get('name','?'), True, C_TEXT), (R_PANEL_X + 8, y+8))
 
-        # 5. Start Button (Below model list)
+        # 5. Start Button
         can = self.can_start_game()
-        # Center button relative to right panel center (R_CX)
-        btn_rect = pygame.Rect(R_CX - 100, PANEL_Y + 420, 200, 60)
+        btn_rect = pygame.Rect(R_CX - 82, PANEL_Y + 345, 164, 50)
         pygame.draw.rect(self.screen, C_BTN_ACTIVE if can else C_BTN_DISABLED, btn_rect, border_radius=8)
         pygame.draw.rect(self.screen, (0,0,0), btn_rect, 2, border_radius=8)
         st_txt = self.title_font.render("START", True, (255,255,255))
@@ -646,12 +603,12 @@ class OnitamaGUI:
         pygame.draw.rect(self.screen, (0,0,0), rect, 2, border_radius=8)
         
         name_surf = self.bold_font.render(CARDS[card_id]["name"], True, C_TEXT)
-        name_rect = name_surf.get_rect(center=(x + CARD_W//2, y + 20))
+        name_rect = name_surf.get_rect(center=(x + CARD_W//2, y + 16))
         self.screen.blit(name_surf, name_rect)
         
         gw = CARD_MINI_GRID
         grid_center_x = x + CARD_W // 2
-        grid_center_y = y + CARD_H // 2 + 10 
+        grid_center_y = y + CARD_H // 2 + 8 
         
         for r in range(-2, 3):
             for c in range(-2, 3):
@@ -661,31 +618,17 @@ class OnitamaGUI:
                 cell_x = grid_center_x + c*gw - gw//2
                 cell_y = grid_center_y + r*gw - gw//2
                 
-                # --- REMOVED CENTER TILE BACKGROUND FILL ---
-                # The block checking `if draw_r == 0 and draw_c == 0:` for background is gone.
-
                 pygame.draw.rect(self.screen, (200,200,200), (cell_x, cell_y, gw, gw), 1)
                 
                 # Piece Contrast
                 # Center Piece (Darker - almost black)
                 if draw_r == 0 and draw_c == 0:
-                    pygame.draw.rect(self.screen, (30, 30, 30), (cell_x+4, cell_y+4, gw-7, gw-7))
+                    pygame.draw.rect(self.screen, (30, 30, 30), (cell_x+2, cell_y+2, gw-4, gw-4))
                 
                 # Move Piece (Lighter - Grey)
                 elif (draw_r, draw_c) in CARDS[card_id]["pattern"]:
-                    pygame.draw.rect(self.screen, (160, 160, 160), (cell_x+4, cell_y+4, gw-7, gw-7))
+                    pygame.draw.rect(self.screen, (160, 160, 160), (cell_x+2, cell_y+2, gw-4, gw-4))
 
-    def handle_gameover_input(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # Check "New Game" button in overlay
-            # Centered button
-            btn_w, btn_h = 240, 70
-            bx = (WINDOW_WIDTH - btn_w) // 2
-            by = (WINDOW_HEIGHT - btn_h) // 2 + 50
-            if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(event.pos):
-                self.state = "MENU"
-                self.board = None # Reset board
-    
     def handle_ai_turn(self):
         pygame.display.set_caption(f"AI ({self.model_manager.active_model_name}) is thinking...")
         pygame.event.pump()
