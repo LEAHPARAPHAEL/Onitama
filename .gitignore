@@ -214,5 +214,4 @@ venv/
 .venv/
 
 models/data/
-models/logs/
-models/weights/
+

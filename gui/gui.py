@@ -24,7 +24,7 @@ def extract_gen_idx(str : str):
 # ==========================================
 # 1. CONFIGURATION & VISUAL CONSTANTS
 # ==========================================
-WINDOW_WIDTH, WINDOW_HEIGHT = 1200, 850 # Increased window size for larger cards
+WINDOW_WIDTH, WINDOW_HEIGHT = 1200, 700 # Increased window size for larger cards
 SQUARE_SIZE = 90
 BOARD_OFFSET_X, BOARD_OFFSET_Y = 100, 200 # Centered board
 

@@ -1,5 +1,5 @@
 model:
-  name: "resnet_4_64"
+  name: "template"
   num_res_blocks: 4 
   num_channels: 64        
   input_planes: 9        

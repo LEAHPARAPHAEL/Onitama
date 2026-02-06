@@ -7,7 +7,7 @@ model:
   action_space_size: 1252
   policy_head_channels : 32
   value_head_channels : 32
-  value_head_hidden: 256
+  value_head_hidden: 128
   dropout: 0.0
   keep_latest: 10
   wdl : false
@@ -24,7 +24,7 @@ training:
   learning_rate: 0.01
   lr_schedule : [4, 8]
 
-  weight_decay: 0.0001
+  weight_decay: 0.0005
   batch_size: 64
   train_proportion: 0.9
   include_old_gens: 10
