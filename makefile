@@ -10,3 +10,6 @@ check_job:
 
 view_job_output:
 	cat logs/${CURRENT_RUN}.out
+
+play:
+	python -m gui.gui

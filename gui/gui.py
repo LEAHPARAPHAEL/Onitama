@@ -113,7 +113,7 @@ class ModelManager:
             try:
                 self.active_config = item['config_data']
                 self.active_model = OnitamaNet(self.active_config).to(self.device)
-                state_dict = torch.load(item["weight_path"], weights_only = False)
+                state_dict = torch.load(item["weight_path"], weights_only = False,map_location=self.device)
                 model_state_dict = state_dict["model_state_dict"]
                 self.active_model.load_state_dict(model_state_dict)
                 self.active_model.eval()
