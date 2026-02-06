@@ -210,7 +210,7 @@ class Board:
             
             if self.player_master & from_mask:
                 # Master move
-                self.player_master = (self.player_master ^ from_mask) | to_mask
+                self.player_master = to_mask
                 is_master_move = True
             else:
                 # Disciple move

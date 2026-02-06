@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -p mesonet 
 #SBATCH --account=m25146
-#SBATCH --job-name=template
-#SBATCH --output=logs/template.out
-#SBATCH --error=logs/template.out
-#SBATCH --time=03:00:00
+#SBATCH --job-name=resnet_4_64
+#SBATCH --output=logs/resnet_4_64.out
+#SBATCH --error=logs/resnet_4_64.out
+#SBATCH --time=02:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
@@ -16,4 +16,4 @@
 source .venv/bin/activate
 
 # Run the training script
-python -m train.end_to_end -c template.yaml
+python -m train.end_to_end -c resnet_4_64.yaml

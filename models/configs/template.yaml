@@ -38,8 +38,4 @@ mcts:
 generations: 20
 
 compute_resources:
-  hours: 2
-  ntask: 1
-  cpus: 4
-  memory: 16 ##counted in GB
-  gpus: 1
+  hours: 4
