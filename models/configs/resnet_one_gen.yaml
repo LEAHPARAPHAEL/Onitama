@@ -1,5 +1,5 @@
 model:
-  name: "resnet_wdl"
+  name: "resnet_one_gen"
   num_res_blocks: 4 
   num_channels: 64        
   input_planes: 9        
@@ -10,7 +10,7 @@ model:
   value_head_hidden: 128
   dropout: 0.0
   keep_latest: 10
-  wdl : true
+  wdl : false
 
 training:
   epochs: 10
@@ -25,23 +25,22 @@ training:
   weight_decay: 0.0001
   batch_size: 64
   train_proportion: 0.9
-  include_old_gens: 10
+  include_old_gens: 1
   momentum: 0.9
   nesterov: true
   use_data_augmentation: true
   mask_illegal_moves: true
- 
   train_workers: 2
   val_workers: 2
 
 data:
-  total_positions: 50000
+  total_positions: 100000
   positions_per_shard: 10000
   max_positions_in_ram: 100000
   batch_size : 64
 
 mcts:
-  simulations: 50
+  simulations: 100
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0
