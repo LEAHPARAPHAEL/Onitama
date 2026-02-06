@@ -1,47 +1,53 @@
 {
     "resnet_4_64_v0": {
         "resnet_4_64_v1": {
-            "played": 600,
-            "wins": 262,
-            "losses": 338,
+            "played": 200,
+            "wins": 26,
+            "losses": 174,
             "draws": 0
         },
         "resnet_4_64_v2": {
             "played": 200,
-            "wins": 105,
-            "losses": 95,
+            "wins": 20,
+            "losses": 180,
             "draws": 0
         },
         "resnet_4_64_v3": {
             "played": 200,
-            "wins": 80,
-            "losses": 120,
+            "wins": 20,
+            "losses": 180,
             "draws": 0
         },
         "resnet_4_64_v4": {
             "played": 200,
-            "wins": 81,
-            "losses": 119,
+            "wins": 22,
+            "losses": 178,
             "draws": 0
         },
         "resnet_4_64_v5": {
             "played": 200,
-            "wins": 87,
-            "losses": 113,
+            "wins": 22,
+            "losses": 178,
             "draws": 0
         },
         "resnet_4_64_v6": {
             "played": 200,
-            "wins": 87,
-            "losses": 113,
+            "wins": 22,
+            "losses": 178,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 27,
+            "losses": 173,
             "draws": 0
         }
     },
     "resnet_4_64_v1": {
         "resnet_4_64_v0": {
-            "played": 600,
-            "wins": 338,
-            "losses": 262,
+            "played": 200,
+            "wins": 174,
+            "losses": 26,
             "draws": 0
         },
         "resnet_4_64_v2": {
@@ -52,34 +58,40 @@
         },
         "resnet_4_64_v3": {
             "played": 200,
-            "wins": 101,
-            "losses": 97,
-            "draws": 2
+            "wins": 80,
+            "losses": 120,
+            "draws": 0
         },
         "resnet_4_64_v4": {
             "played": 200,
-            "wins": 91,
-            "losses": 109,
-            "draws": 0
+            "wins": 76,
+            "losses": 123,
+            "draws": 1
         },
         "resnet_4_64_v5": {
             "played": 200,
-            "wins": 124,
-            "losses": 76,
+            "wins": 64,
+            "losses": 136,
             "draws": 0
         },
         "resnet_4_64_v6": {
             "played": 200,
-            "wins": 119,
-            "losses": 81,
+            "wins": 80,
+            "losses": 120,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 74,
+            "losses": 126,
             "draws": 0
         }
     },
     "resnet_4_64_v2": {
         "resnet_4_64_v0": {
             "played": 200,
-            "wins": 95,
-            "losses": 105,
+            "wins": 180,
+            "losses": 20,
             "draws": 0
         },
         "resnet_4_64_v1": {
@@ -90,70 +102,252 @@
         },
         "resnet_4_64_v3": {
             "played": 200,
-            "wins": 104,
-            "losses": 96,
+            "wins": 98,
+            "losses": 101,
+            "draws": 1
+        },
+        "resnet_4_64_v4": {
+            "played": 200,
+            "wins": 95,
+            "losses": 105,
+            "draws": 0
+        },
+        "resnet_4_64_v5": {
+            "played": 200,
+            "wins": 93,
+            "losses": 106,
+            "draws": 1
+        },
+        "resnet_4_64_v6": {
+            "played": 200,
+            "wins": 94,
+            "losses": 105,
+            "draws": 1
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 88,
+            "losses": 112,
             "draws": 0
         }
     },
     "resnet_4_64_v3": {
         "resnet_4_64_v0": {
             "played": 200,
-            "wins": 120,
-            "losses": 80,
+            "wins": 180,
+            "losses": 20,
             "draws": 0
         },
         "resnet_4_64_v1": {
             "played": 200,
-            "wins": 97,
-            "losses": 101,
-            "draws": 2
+            "wins": 120,
+            "losses": 80,
+            "draws": 0
         },
         "resnet_4_64_v2": {
             "played": 200,
-            "wins": 96,
-            "losses": 104,
+            "wins": 101,
+            "losses": 98,
+            "draws": 1
+        },
+        "resnet_4_64_v4": {
+            "played": 200,
+            "wins": 88,
+            "losses": 112,
+            "draws": 0
+        },
+        "resnet_4_64_v5": {
+            "played": 200,
+            "wins": 81,
+            "losses": 119,
+            "draws": 0
+        },
+        "resnet_4_64_v6": {
+            "played": 200,
+            "wins": 101,
+            "losses": 99,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 89,
+            "losses": 111,
             "draws": 0
         }
     },
     "resnet_4_64_v4": {
         "resnet_4_64_v0": {
             "played": 200,
-            "wins": 119,
-            "losses": 81,
+            "wins": 178,
+            "losses": 22,
             "draws": 0
         },
         "resnet_4_64_v1": {
             "played": 200,
-            "wins": 109,
-            "losses": 91,
+            "wins": 123,
+            "losses": 76,
+            "draws": 1
+        },
+        "resnet_4_64_v2": {
+            "played": 200,
+            "wins": 105,
+            "losses": 95,
             "draws": 0
+        },
+        "resnet_4_64_v3": {
+            "played": 200,
+            "wins": 112,
+            "losses": 88,
+            "draws": 0
+        },
+        "resnet_4_64_v5": {
+            "played": 200,
+            "wins": 94,
+            "losses": 106,
+            "draws": 0
+        },
+        "resnet_4_64_v6": {
+            "played": 200,
+            "wins": 81,
+            "losses": 119,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 85,
+            "losses": 114,
+            "draws": 1
         }
     },
     "resnet_4_64_v5": {
         "resnet_4_64_v0": {
             "played": 200,
-            "wins": 113,
-            "losses": 87,
+            "wins": 178,
+            "losses": 22,
             "draws": 0
         },
         "resnet_4_64_v1": {
             "played": 200,
-            "wins": 76,
-            "losses": 124,
+            "wins": 136,
+            "losses": 64,
+            "draws": 0
+        },
+        "resnet_4_64_v2": {
+            "played": 200,
+            "wins": 106,
+            "losses": 93,
+            "draws": 1
+        },
+        "resnet_4_64_v3": {
+            "played": 200,
+            "wins": 119,
+            "losses": 81,
+            "draws": 0
+        },
+        "resnet_4_64_v4": {
+            "played": 200,
+            "wins": 106,
+            "losses": 94,
+            "draws": 0
+        },
+        "resnet_4_64_v6": {
+            "played": 200,
+            "wins": 101,
+            "losses": 99,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 115,
+            "losses": 85,
             "draws": 0
         }
     },
     "resnet_4_64_v6": {
         "resnet_4_64_v0": {
             "played": 200,
-            "wins": 113,
-            "losses": 87,
+            "wins": 178,
+            "losses": 22,
             "draws": 0
         },
         "resnet_4_64_v1": {
             "played": 200,
-            "wins": 81,
-            "losses": 119,
+            "wins": 120,
+            "losses": 80,
+            "draws": 0
+        },
+        "resnet_4_64_v2": {
+            "played": 200,
+            "wins": 105,
+            "losses": 94,
+            "draws": 1
+        },
+        "resnet_4_64_v3": {
+            "played": 200,
+            "wins": 99,
+            "losses": 101,
+            "draws": 0
+        },
+        "resnet_4_64_v4": {
+            "played": 200,
+            "wins": 119,
+            "losses": 81,
+            "draws": 0
+        },
+        "resnet_4_64_v5": {
+            "played": 200,
+            "wins": 99,
+            "losses": 101,
+            "draws": 0
+        },
+        "resnet_4_64_v7": {
+            "played": 200,
+            "wins": 103,
+            "losses": 97,
+            "draws": 0
+        }
+    },
+    "resnet_4_64_v7": {
+        "resnet_4_64_v0": {
+            "played": 200,
+            "wins": 173,
+            "losses": 27,
+            "draws": 0
+        },
+        "resnet_4_64_v1": {
+            "played": 200,
+            "wins": 126,
+            "losses": 74,
+            "draws": 0
+        },
+        "resnet_4_64_v2": {
+            "played": 200,
+            "wins": 112,
+            "losses": 88,
+            "draws": 0
+        },
+        "resnet_4_64_v3": {
+            "played": 200,
+            "wins": 111,
+            "losses": 89,
+            "draws": 0
+        },
+        "resnet_4_64_v4": {
+            "played": 200,
+            "wins": 114,
+            "losses": 85,
+            "draws": 1
+        },
+        "resnet_4_64_v5": {
+            "played": 200,
+            "wins": 85,
+            "losses": 115,
+            "draws": 0
+        },
+        "resnet_4_64_v6": {
+            "played": 200,
+            "wins": 97,
+            "losses": 103,
             "draws": 0
         }
     }
