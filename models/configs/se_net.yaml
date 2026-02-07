@@ -42,7 +42,7 @@ data:
   batch_size : 64
 
 mcts:
-  simulations: 100
+  simulations: 400
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0
