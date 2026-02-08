@@ -8,10 +8,16 @@ from game.board import Board
 
 class MCTS_Rollout:
     def __init__(self, config):
-        self.num_simulations = config.get('simulations', 800)
-        self.temperature = config.get('temperature', 0.05)
-        self.inverse_temperature = 1. / self.temperature
-        self.c_puct = config.get('c_puct', 1.0)
+        mcts_config = config['mcts']
+        self.num_simulations = mcts_config.get('simulations', 100)
+
+        self.high_temperature = mcts_config.get('high_temperature', 1.0)
+        self.low_temperature = mcts_config.get('low_temperature', 0.0)
+
+        self.lower_temperature_after = mcts_config.get('lower_temperature_after', 10)
+        self.c_puct = mcts_config.get('c_puct', 1.0)
+
+
     def search_batch(self, boards):
         '''
         Only for being compatible with the existing code 
@@ -31,10 +37,22 @@ class MCTS_Rollout:
             
         action_probs = torch.zeros(1252)
         
-        total_visits = sum(child.visit_count ** self.inverse_temperature for child in root.children.values())
-        
-        for action_idx, child in root.children.items():
-            action_probs[action_idx] = (child.visit_count ** self.inverse_temperature) / total_visits
+        if root_board.turn_count >= self.lower_temperature_after:
+            temperature = self.low_temperature
+        else:
+            temperature = self.high_temperature
+
+        if temperature == 0:
+            best_action_idx = max(root.children, key=lambda k: root.children[k].visit_count)
+            action_probs[best_action_idx] = 1.0
+
+        else:
+            total_visits = sum(c.visit_count ** temperature for c in root.children.values())
+            
+            assert(total_visits != 0)
+
+            for action_idx, child in root.children.items():
+                action_probs[action_idx] = (child.visit_count ** temperature) / total_visits
             
         return action_probs
 

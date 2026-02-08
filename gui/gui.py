@@ -121,6 +121,9 @@ class ModelManager:
         if 0 <= index < len(self.available_models):
             item = self.available_models[index]
             item_config = item["config_data"]
+            item_config["mcts"]["high_temperature"] = 0.0
+            item_config["mcts"]["low_temperature"] = 0.0
+            item_config["mcts"]["simulations"] = num_simulations
             self.agent = OnitamaAgent(item_config,item["weight_path"],num_simulations=num_simulations)
             return self.agent.loaded
         return False
@@ -215,7 +218,7 @@ class OnitamaGUI:
         ratio = (x - min_x) / self.slider_rect.width
         
         # Map to range [50, 1500]
-        val = 50 + ratio * (1500 - 50)
+        val = 50 + ratio * (10000 - 50)
         self.menu_mcts_sims = int(val)
 
     # --- UPDATED START LOGIC ---
@@ -553,7 +556,7 @@ class OnitamaGUI:
         self.slider_rect = pygame.Rect(L_CX - 100, PANEL_Y + 65, 200, 16)
         pygame.draw.rect(self.screen, (200,200,200), self.slider_rect, border_radius=8)
         pygame.draw.rect(self.screen, (100,100,100), self.slider_rect, 2, border_radius=8)
-        ratio = (self.menu_mcts_sims - 50)/(1500-50)
+        ratio = (self.menu_mcts_sims - 50)/(10000-50)
         kx = self.slider_rect.left + ratio * self.slider_rect.width
         pygame.draw.circle(self.screen, C_MENU_BG, (int(kx), int(self.slider_rect.centery)), 8)
 

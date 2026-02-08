@@ -3,6 +3,7 @@ from mcts.mcts_rollout import MCTS_Rollout
 from network.model import OnitamaNet
 from mcts.batched_mcts import BatchedMCTS
 import os
+import torch.nn.functional as F
 
 '''
 Code for agentic play of Onitama
@@ -24,7 +25,7 @@ class OnitamaAgent:
 
     def setup_mcts(self, config, weights_path=None,num_simulations=100):
         print(f"Setting up MCTS with config: {config}")
-        print(f"{config["model"].get('type',None)}")
+        print(f"{config['model'].get('type',None)}")
         if config["model"].get('type',None) == "rollout":
             print("Using rollout MCTS")
             self.rollout = True
@@ -53,12 +54,10 @@ class OnitamaAgent:
     def select_move(self, board):
         if self.rollout:
             action_probs = self.active_mcts.search(board)
-            policy = torch.tensor(action_probs)
+            policy = action_probs.clone().detach()
         else:
             policy = self.active_mcts.search_batch([board])[0]
-
-            if self.model_manager.active_config["training"].get("mask_illegal_moves", False):
-                policy = F.relu(policy)
+            policy = F.relu(policy)
 
         action_idx = torch.multinomial(policy, 1).item()
         move = board.action_index_to_move(action_idx)
