@@ -51,7 +51,38 @@ class MaskIllegalMovesPolicyLoss(nn.Module):
 
         p_logits[illegal_mask] = -1.0e10
         return self.ce_loss(p_logits, clean_target)
-        
+    
+
+def swap_player_cards(states, policies):
+
+    new_states = states.clone()
+    new_policies = policies.clone()
+
+    card1_channel = states[..., 4, :, :].clone()
+    card2_channel = states[..., 5, :, :].clone()
+
+    new_states[..., 4, :, :] = card2_channel
+    new_states[..., 5, :, :] = card1_channel
+
+    new_policies[..., 0:625] = policies[..., 625:1250]
+    new_policies[..., 625:1250] = policies[..., 0:625]
+    
+    new_policies[..., 1250] = policies[..., 1251]
+    new_policies[..., 1251] = policies[..., 1250]
+
+    return new_states, new_policies
+
+def swap_opponent_cards(states):
+
+    new_states = states.clone()
+
+    card1_channel = states[..., 6, :, :].clone()
+    card2_channel = states[..., 7, :, :].clone()
+
+    new_states[..., 6, :, :] = card2_channel
+    new_states[..., 7, :, :] = card1_channel
+
+    return new_states
 
 
 class OnitamaStreamingDataset(IterableDataset):
@@ -97,9 +128,17 @@ class OnitamaStreamingDataset(IterableDataset):
                     policy = policies[idx]
                     value = values[idx]
 
-                    if self.use_data_augmentation and torch.rand(1).item() > 0.5:
-                        policy = policy[self.flip_mask]
-                        nn_input = torch.flip(nn_input, dims=[-1])
+                    if self.use_data_augmentation:
+                    
+                        if torch.rand(1).item() > 0.5:
+                            policy = policy[self.flip_mask]
+                            nn_input = torch.flip(nn_input, dims=[-1])
+
+                        if torch.rand(1).item() > 0.5:
+                            nn_input, policy = swap_player_cards(nn_input, policy)
+
+                        if torch.rand(1).item() > 0.5:
+                            nn_input = swap_opponent_cards(nn_input)
 
                     yield nn_input, policy, value
 

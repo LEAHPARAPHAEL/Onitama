@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import collections
 import random
 from agent.onitama_agent import OnitamaAgent
+from network.input import get_nn_input
 
 def extract_gen_idx(str : str):
     try:
@@ -145,14 +146,16 @@ class OnitamaGUI:
         
         self.model_manager = ModelManager()
         self.model_manager.scan_models()
-        ##TODO
-        #policy = self.model_manager.active_mcts.search_batch([board])[0]
         self.board = None 
         
         # State
         self.state = "MENU" # MENU, PLAYING, GAMEOVER
         self.human_is_blue = True 
         
+        # New Analysis State
+        self.ai_eval = 0.0 # Placeholder for network value (-1 to 1 or 0 to 1)
+        self.last_ai_move = None # Tuple (start_idx, end_idx)
+
         # Menu Data (Preserved between games)
         self.menu_random_cards = True
         self.menu_selected_model_idx = -1
@@ -166,7 +169,19 @@ class OnitamaGUI:
         self.selected_card_slot = None
         self.selected_piece_idx = None
         self.valid_targets = []
-        self.ui_rects = {} 
+        self.ui_rects = {}
+
+    def compute_network_value(self, board):
+        """
+        Placeholder for computing the game value from the network's perspective.
+        """
+        # TODO: Implement actual network inference here
+        # For now, return a random value between -1 (Loss) and 1 (Win)
+        if self.model_manager.agent.active_model is not None:
+            value = self.model_manager.agent.active_model(get_nn_input(board).unsqueeze(0).to(self.model_manager.agent.device))[1].item()
+        else:
+            value = 0.0
+        return value
 
     def run(self):
         while True:
@@ -174,6 +189,7 @@ class OnitamaGUI:
             # We check for AI turn here so that the previous frame (with Human's move)
             # has already been flipped to the display.
             if self.state == "PLAYING" and self.board and not self.board.game_over:
+                self.ai_eval = self.compute_network_value(self.board)
                 is_human_turn = (self.board.turn == self.human_is_blue)
                 if not is_human_turn:
                     self.handle_ai_turn()
@@ -339,19 +355,52 @@ class OnitamaGUI:
 
     # --- PERSPECTIVE FIX IN DRAW_GAME (SCALED) ---
     def draw_game(self):
-        # Grid
+        # --- 0. Draw Background & Evaluation Text ---
+        
+        # Draw AI Value
+        val_text = f"Network Value: {self.ai_eval:.2f}"
+        # Color based on value: Red (bad for AI) -> White -> Green (good for AI)
+        # Assuming AI is usually P2 (Red) in logic, or just relative value.
+        # Let's just use standard text color for now.
+        txt_surf = self.bold_font.render(val_text, True, C_TEXT)
+        # Position centered above board (Board starts at Y=165)
+        txt_rect = txt_surf.get_rect(center=(BOARD_OFFSET_X + (5*SQUARE_SIZE)//2, BOARD_OFFSET_Y - 20))
+        self.screen.blit(txt_surf, txt_rect)
+
+        # --- 1. Draw Grid ---
         for r in range(5):
             for c in range(5):
                 rect = pygame.Rect(BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
                 pygame.draw.rect(self.screen, C_GRID, rect, 2)
                 if (r==0 or r==4) and c==2: pygame.draw.rect(self.screen, (220, 210, 190), rect)
 
-        # Pieces
+        # --- 2. Determine Perspective ---
         is_human_turn = (self.board.turn == self.human_is_blue)
         should_rotate = not is_human_turn
 
         def get_rot(b): return int(f"{b:025b}"[::-1], 2)
 
+        if self.last_ai_move is not None:
+            start, end = self.last_ai_move
+            
+            # CRITICAL FIX:
+            # The AI stores the move in its own perspective (0-4 is bottom).
+            # But visually, the AI is at the top (20-24).
+            # We must flip the indices (24 - i) to map AI's logical bottom to Visual Top.
+            vis_start = 24 - start
+            vis_end = 24 - end
+            
+            for idx in [vis_start, vis_end]:
+                r, c = idx // 5, idx % 5
+                cx = BOARD_OFFSET_X + c * SQUARE_SIZE
+                cy = BOARD_OFFSET_Y + r * SQUARE_SIZE
+                
+                # Orange/Yellow Highlight
+                s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+                s.fill((255, 165, 0, 100)) # Orange with alpha
+                self.screen.blit(s, (cx, cy))
+
+        # --- 4. Draw Pieces ---
         pb, mb = self.board.player_disciples, self.board.player_master
         ob, om = self.board.opponent_disciples, self.board.opponent_master
 
@@ -362,7 +411,7 @@ class OnitamaGUI:
             self._draw_bits(pb, mb, C_P1 if self.human_is_blue else C_P2)
             self._draw_bits(ob, om, C_P2 if self.human_is_blue else C_P1)
 
-        # Cards
+        # --- 5. Draw Cards ---
         # Scaled Y Positions
         ai_y = 58  
         hum_y = 478 
@@ -384,7 +433,7 @@ class OnitamaGUI:
         
         self.render_card(self.board.side_card, side_x, side_y, True, "side")
 
-        # Selection/Target Highlights
+        # --- 6. Selection/Target Highlights (Human Turn) ---
         if self.selected_piece_idx is not None:
             vis = self.selected_piece_idx if not should_rotate else 24 - self.selected_piece_idx
             r, c = vis // 5, vis % 5
@@ -653,9 +702,14 @@ class OnitamaGUI:
     def handle_ai_turn(self):
         pygame.display.set_caption(f"AI ({self.model_manager.active_model_name}) is thinking...")
         pygame.event.pump()
-        
-        #move = agent.select_move(self.board)
+        # 2. Select Move
         move = self.model_manager.agent.select_move(self.board)
+        
+        # 3. Store move for highlighting (Start Index, End Index)
+
+        self.last_ai_move = (move.from_idx, move.to_idx)
+
+        # 4. Play
         self.board.play_move(move)
 
 if __name__ == "__main__":
