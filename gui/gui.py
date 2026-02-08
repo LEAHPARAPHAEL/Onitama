@@ -120,6 +120,8 @@ class ModelManager:
 
                 self.active_mcts = BatchedMCTS(self.active_model, self.active_config, self.device)
                 self.active_mcts.num_simulations = num_simulations
+                self.active_mcts.high_temperature = 0.0
+                self.active_mcts.low_temperature = 0.0
 
                 self.active_model_name = item['name']
                 return True
@@ -393,6 +395,19 @@ class OnitamaGUI:
             s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
             pygame.draw.circle(s, (100,255,100,100), (SQUARE_SIZE//2, SQUARE_SIZE//2), 12) # Scaled radius
             self.screen.blit(s, (BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE))
+
+    def handle_gameover_input(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Check "New Game" button in overlay
+            # Scaled Dimensions from draw_gameover:
+            btn_w, btn_h = 200, 58
+            bx = (WINDOW_WIDTH - btn_w) // 2
+            by = (WINDOW_HEIGHT - btn_h) // 2 + 40
+            
+            if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(event.pos):
+                self.state = "MENU"
+                self.board = None # Reset board
+
 
     def draw_gameover(self):
         # Overlay

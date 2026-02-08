@@ -82,6 +82,10 @@ class OnitamaStreamingDataset(IterableDataset):
                 policies = data["policies"] 
                 values = data["values"]  
 
+                if torch.isnan(states).any() or torch.isnan(values).any():
+                    print(f"CRITICAL: Found NaNs inside file {filepath}")
+                    continue
+
                 num_items = states.shape[0]
 
 
@@ -477,6 +481,8 @@ def train(args):
             loss = loss_p + loss_v
 
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
             total_loss += loss.item()
