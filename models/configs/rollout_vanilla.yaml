@@ -1,0 +1,7 @@
+model: 
+  name : "rollout_vanilla"
+
+mcts:
+  simulations: 100
+  c_puct: 1.0
+  temperature: 1.0

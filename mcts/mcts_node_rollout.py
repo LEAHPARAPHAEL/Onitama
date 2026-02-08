@@ -1,0 +1,68 @@
+import math
+import numpy as np
+
+class MCTSNode_Rollout:
+    def __init__(self, parent=None, mct = False):
+        self.parent = parent
+        self.children = {}   
+        self.visit_count = 0
+        self.value_sum = 0.0
+        self.mct = mct
+        self.is_expanded = False
+        
+    @property
+    def value(self):
+        """Returns the mean Action Value Q(s,a)."""
+        if self.visit_count == 0:
+            return 0
+        return self.value_sum / self.visit_count
+
+    def select_child(self, c_puct=1.0):
+        """
+        Selects the best child according to the PUCT formula.
+        """
+        best_score = -float('inf')
+        best_action = -1
+        best_child = None
+
+        sqrt_total_visits = math.sqrt(self.visit_count)
+
+        for action_idx, child in self.children.items():
+            q_value = -child.value
+            
+            u_value = c_puct * (sqrt_total_visits / (1 + child.visit_count))
+            
+            
+            score = q_value + u_value
+
+            if score > best_score:
+                best_score = score
+                best_action = action_idx
+                best_child = child
+
+        return best_action, best_child
+
+    def expand(self, move_idx):
+        """
+        Expands the node by creating children for all valid actions.
+        policy_probs: A dictionary {action_index: probability} 
+                      already masked and normalized by the MCTS driver.
+        """
+        self.is_expanded = True
+        self.children[move_idx] = MCTSNode_Rollout(parent=self, mct = True)
+        return self.children[move_idx]
+        
+
+    def backpropagate(self, value):
+        """
+        Update stats and recurse up to the root.
+        value: The evaluation of the game state from the perspective of the 
+               player who just moved to reach this node.
+        """
+        self.visit_count += 1
+        self.value_sum += value
+        
+        # Take the opposite of the value to give to the parent
+        # (Because the turn has changed)
+        if self.parent:
+            self.parent.backpropagate(-value)

@@ -9,6 +9,7 @@ from network.model import OnitamaNet
 import yaml
 import torch
 from mcts.batched_mcts import BatchedMCTS
+from mcts.mcts_rollout import MCTS_Rollout
 import torch.nn.functional as F
 import collections
 import random
@@ -82,7 +83,14 @@ class ModelManager:
                         
                     model_name = data.get("model", {}).get("name")
                     if not model_name: continue
-                    
+                    if model_name == "rollout_vanilla":
+                        self.available_models.append({
+                            "name": model_name,
+                            "config_path": cfg_file,
+                            "weight_path": None,
+                            "config_data": data
+                        })
+                        continue
                     # 2. Construct path to the model's specific weight folder
                     # Structure: ./models/weights/{model_name}/
                     target_folder = os.path.join(self.weight_path, model_name)
@@ -110,21 +118,26 @@ class ModelManager:
     def load_model(self, index, num_simulations = 100):
         if 0 <= index < len(self.available_models):
             item = self.available_models[index]
-            try:
-                self.active_config = item['config_data']
-                self.active_model = OnitamaNet(self.active_config).to(self.device)
-                state_dict = torch.load(item["weight_path"], weights_only = False,map_location=self.device)
-                model_state_dict = state_dict["model_state_dict"]
-                self.active_model.load_state_dict(model_state_dict)
-                self.active_model.eval()
-
-                self.active_mcts = BatchedMCTS(self.active_model, self.active_config, self.device)
-                self.active_mcts.num_simulations = num_simulations
-
+            if item['name'] == "rollout_vanilla":
+                self.active_mcts = MCTS_Rollout(config=item['config_data'])
                 self.active_model_name = item['name']
                 return True
-            except Exception as e:
-                print(f"Failed to load model: {e}")
+            else:
+                try:
+                    self.active_config = item['config_data']
+                    self.active_model = OnitamaNet(self.active_config).to(self.device)
+                    state_dict = torch.load(item["weight_path"], weights_only = False,map_location=self.device)
+                    model_state_dict = state_dict["model_state_dict"]
+                    self.active_model.load_state_dict(model_state_dict)
+                    self.active_model.eval()
+
+                    self.active_mcts = BatchedMCTS(self.active_model, self.active_config, self.device)
+                    self.active_mcts.num_simulations = num_simulations
+
+                    self.active_model_name = item['name']
+                    return True
+                except Exception as e:
+                    print(f"Failed to load model: {e}")
         return False
 # ==========================================
 # 4. GUI CLASS
@@ -144,6 +157,8 @@ class OnitamaGUI:
         
         self.model_manager = ModelManager()
         self.model_manager.scan_models()
+        ##TODO
+        #policy = self.model_manager.active_mcts.search_batch([board])[0]
         self.board = None 
         
         # State
@@ -633,14 +648,18 @@ class OnitamaGUI:
         pygame.display.set_caption(f"AI ({self.model_manager.active_model_name}) is thinking...")
         pygame.event.pump()
         
+        #move = agent.select_move(self.board)
+        try:
+            policy = self.model_manager.active_mcts.search_batch([self.board])[0]
 
-        policy = self.model_manager.active_mcts.search_batch([self.board])[0]
+            if self.model_manager.active_config["training"].get("mask_illegal_moves", False):
+                policy = F.relu(policy)
+            action_idx = torch.multinomial(policy, 1).item()
+        except Exception as e:
+            action_probs = self.model_manager.active_mcts.search(self.board)
+            action_idx = torch.multinomial(torch.tensor(action_probs), 1).item()
 
-        if self.model_manager.active_config["training"].get("mask_illegal_moves", False):
-            policy = F.relu(policy)
-        action_idx = torch.multinomial(policy, 1).item()
         move = self.board.action_index_to_move(action_idx)
-
         self.board.play_move(move)
 
 if __name__ == "__main__":
