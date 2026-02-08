@@ -1,5 +1,6 @@
-model: 
-  name : "rollout_vanilla"
+model:
+  name: "vanilla_mct"
+  type: "rollout"
 
 mcts:
   simulations: 100

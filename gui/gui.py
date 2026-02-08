@@ -80,10 +80,11 @@ class ModelManager:
                 try:
                     with open(cfg_file, 'r') as f:
                         data = yaml.safe_load(f)
-                        
-                    model_name = data.get("model", {}).get("name")
+                    model =  data.get("model", {})
+                    model_name = model.get("name")
+
                     if not model_name: continue
-                    if model_name == "rollout_vanilla":
+                    if data.get("model",{}).get("type",None)== "rollout":
                         self.available_models.append({
                             "name": model_name,
                             "config_path": cfg_file,
@@ -114,11 +115,12 @@ class ModelManager:
                             })
                 except Exception as e:
                     print(f"Error scanning {cfg_file}: {e}")
+            print([model["name"] for model in self.available_models])
 
     def load_model(self, index, num_simulations = 100):
         if 0 <= index < len(self.available_models):
             item = self.available_models[index]
-            if item['name'] == "rollout_vanilla":
+            if item["config_data"]["model"].get('type',None) == "rollout":
                 self.active_mcts = MCTS_Rollout(config=item['config_data'])
                 self.active_model_name = item['name']
                 return True
