@@ -13,7 +13,7 @@ from mcts.mcts_rollout import MCTS_Rollout
 import torch.nn.functional as F
 import collections
 import random
-
+from agent.onitama_agent import OnitamaAgent
 
 def extract_gen_idx(str : str):
     try:
@@ -120,26 +120,9 @@ class ModelManager:
     def load_model(self, index, num_simulations = 100):
         if 0 <= index < len(self.available_models):
             item = self.available_models[index]
-            if item["config_data"]["model"].get('type',None) == "rollout":
-                self.active_mcts = MCTS_Rollout(config=item['config_data'])
-                self.active_model_name = item['name']
-                return True
-            else:
-                try:
-                    self.active_config = item['config_data']
-                    self.active_model = OnitamaNet(self.active_config).to(self.device)
-                    state_dict = torch.load(item["weight_path"], weights_only = False,map_location=self.device)
-                    model_state_dict = state_dict["model_state_dict"]
-                    self.active_model.load_state_dict(model_state_dict)
-                    self.active_model.eval()
-
-                    self.active_mcts = BatchedMCTS(self.active_model, self.active_config, self.device)
-                    self.active_mcts.num_simulations = num_simulations
-
-                    self.active_model_name = item['name']
-                    return True
-                except Exception as e:
-                    print(f"Failed to load model: {e}")
+            item_config = item["config_data"]
+            self.agent = OnitamaAgent(item_config,item["weight_path"],num_simulations=num_simulations)
+            return self.agent.loaded
         return False
 # ==========================================
 # 4. GUI CLASS
@@ -651,17 +634,7 @@ class OnitamaGUI:
         pygame.event.pump()
         
         #move = agent.select_move(self.board)
-        try:
-            policy = self.model_manager.active_mcts.search_batch([self.board])[0]
-
-            if self.model_manager.active_config["training"].get("mask_illegal_moves", False):
-                policy = F.relu(policy)
-            action_idx = torch.multinomial(policy, 1).item()
-        except Exception as e:
-            action_probs = self.model_manager.active_mcts.search(self.board)
-            action_idx = torch.multinomial(torch.tensor(action_probs), 1).item()
-
-        move = self.board.action_index_to_move(action_idx)
+        move = self.model_manager.agent.select_move(self.board)
         self.board.play_move(move)
 
 if __name__ == "__main__":
