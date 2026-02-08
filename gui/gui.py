@@ -167,6 +167,15 @@ class OnitamaGUI:
 
     def run(self):
         while True:
+            # --- 1. AI Logic (Moved to start) ---
+            # We check for AI turn here so that the previous frame (with Human's move)
+            # has already been flipped to the display.
+            if self.state == "PLAYING" and self.board and not self.board.game_over:
+                is_human_turn = (self.board.turn == self.human_is_blue)
+                if not is_human_turn:
+                    self.handle_ai_turn()
+
+            # --- 2. Event Handling ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit(); sys.exit()
@@ -178,24 +187,20 @@ class OnitamaGUI:
                 elif self.state == "GAMEOVER":
                     self.handle_gameover_input(event)
 
+            # --- 3. Drawing ---
             self.screen.fill(C_BG)
             if self.state == "MENU":
                 self.draw_menu()
             else:
                 self.draw_game()
+                
+                # Check for Game Over logic update
+                if self.board and self.board.game_over:
+                    self.state = "GAMEOVER"
+                
                 # Draw Overlay if Game Over
                 if self.state == "GAMEOVER":
                     self.draw_gameover()
-                
-                # Check for Game Over logic update
-                if self.state == "PLAYING":
-                    if self.board.game_over:
-                        self.state = "GAMEOVER"
-                    else:
-                        # Trigger AI
-                        is_human_turn = (self.board.turn == self.human_is_blue)
-                        if not is_human_turn:
-                            self.handle_ai_turn()
 
             pygame.display.flip()
             self.clock.tick(60)
@@ -388,6 +393,19 @@ class OnitamaGUI:
             s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
             pygame.draw.circle(s, (100,255,100,100), (SQUARE_SIZE//2, SQUARE_SIZE//2), 12) # Scaled radius
             self.screen.blit(s, (BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE))
+
+    def handle_gameover_input(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Check "New Game" button in overlay
+            # Scaled Dimensions from draw_gameover:
+            btn_w, btn_h = 200, 58
+            bx = (WINDOW_WIDTH - btn_w) // 2
+            by = (WINDOW_HEIGHT - btn_h) // 2 + 40
+            
+            if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(event.pos):
+                self.state = "MENU"
+                self.board = None # Reset board
+
 
     def draw_gameover(self):
         # Overlay
