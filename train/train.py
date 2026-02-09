@@ -108,8 +108,7 @@ class OnitamaStreamingDataset(IterableDataset):
 
         for filepath in my_files:
             try:
-                with gzip.open(filepath, "rb") as f:
-                    data = torch.load(f, weights_only=False)
+                data = torch.load(filepath, weights_only=False)
                 
                 states = data["states"]   
                 policies = data["policies"] 
@@ -221,7 +220,7 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
     val_shards_paths = []
 
     for shard_idx in tqdm(range(num_shards), desc="Finalizing Shards"):
-        part_files = glob.glob(os.path.join(temp_dir, f"shard_{shard_idx}_part_*.pt.gz"))
+        part_files = glob.glob(os.path.join(temp_dir, f"shard_{shard_idx}_part_*.pt"))
         if not part_files:
             continue
             
@@ -231,8 +230,7 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
         
         for part in part_files:
             try:
-                with gzip.open(part, "rb") as f:
-                    part_data = torch.load(f, weights_only=False)
+                part_data = torch.load(part, weights_only=False)
                 all_states.append(part_data['states'])
                 all_policies.append(part_data['policies'])
                 all_values.append(part_data['values'])
@@ -256,12 +254,11 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
         
         def save_split(s, p, v, path):
             if len(s) > 0:
-                with gzip.open(path, "wb", compresslevel=5) as f:
-                    torch.save({
-                        "states": s,
-                        "policies": p,
-                        "values": v
-                    }, f)
+                torch.save({
+                    "states": s,
+                    "policies": p,
+                    "values": v
+                }, path)
                 return path
             return None
 
@@ -269,14 +266,14 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
             merged_states[:split_idx], 
             merged_policies[:split_idx], 
             merged_values[:split_idx],
-            os.path.join(train_dir, f"shard_{shard_idx}.pt.gz")
+            os.path.join(train_dir, f"shard_{shard_idx}.pt")
         )
         
         v_path = save_split(
             merged_states[split_idx:], 
             merged_policies[split_idx:], 
             merged_values[split_idx:],
-            os.path.join(val_dir, f"shard_{shard_idx}.pt.gz")
+            os.path.join(val_dir, f"shard_{shard_idx}.pt")
         )
 
         if t_path: train_shards_paths.append(t_path)
@@ -294,14 +291,13 @@ def _flush_buckets_to_disk(buckets, temp_dir, flush_id):
             cat_policies = torch.cat(bucket_data['policies'])
             cat_values = torch.cat(bucket_data['values'])
             
-            filename = os.path.join(temp_dir, f"shard_{i}_part_{flush_id}.pt.gz")
+            filename = os.path.join(temp_dir, f"shard_{i}_part_{flush_id}.pt")
             
-            with gzip.open(filename, "wb", compresslevel=5) as f:
-                torch.save({
-                    "states": cat_states,
-                    "policies": cat_policies,
-                    "values": cat_values
-                }, f)
+            torch.save({
+                "states": cat_states,
+                "policies": cat_policies,
+                "values": cat_values
+            }, filename)
         
 
 # data v0 is generated from a random model
