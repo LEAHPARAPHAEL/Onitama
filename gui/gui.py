@@ -100,7 +100,7 @@ class ModelManager:
                     if os.path.isdir(target_folder):
                         # 3. Find .pt files inside this folder
                         # We search for *.pt. You can add *.pth if needed.
-                        weight_files = glob.glob(os.path.join(target_folder, "*.pt"))
+                        weight_files = glob.glob(os.path.join(target_folder, "*.pt.gz"))
                         
                         if weight_files:
                             # Optional: Sort to find the "latest" version.

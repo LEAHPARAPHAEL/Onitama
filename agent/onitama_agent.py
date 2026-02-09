@@ -4,6 +4,7 @@ from network.model import OnitamaNet
 from mcts.batched_mcts import BatchedMCTS
 import os
 import torch.nn.functional as F
+import gzip
 
 '''
 Code for agentic play of Onitama
@@ -36,7 +37,8 @@ class OnitamaAgent:
             try:
                 self.active_config = config
                 self.active_model = OnitamaNet(self.active_config).to(self.device)
-                state_dict = torch.load(weights_path, weights_only = False,map_location=self.device)
+                with gzip.open(weights_path, "rb") as f:
+                    state_dict = torch.load(f, weights_only = False, map_location=self.device)
                 model_state_dict = state_dict["model_state_dict"]
                 self.active_model.load_state_dict(model_state_dict)
                 self.active_model.eval()
