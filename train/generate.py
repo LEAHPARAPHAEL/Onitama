@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from network.input import get_nn_input
 from train.train_utils import extract_gen_idx, extract_shard_idx, extract_model_steps, extract_positions
 import sys
+import gzip
 
 def generate(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -48,7 +49,10 @@ def generate(args):
     if model_gens_files:
         newest_model_file = model_gens_files[-1]
         gen = extract_gen_idx(newest_model_file) + 1
-        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
+
+        with gzip.open(os.path.join(model_dir, newest_model_file), "rb") as f:
+            save_dict = torch.load(f, weights_only = False)
+            
         model_state_dict = save_dict["model_state_dict"]
         training_over = save_dict["training_over"]
         
@@ -150,8 +154,10 @@ def generate(args):
                         "values": torch.tensor(shard_values[:max_positions], dtype=torch.float32).unsqueeze(1)
                     }
 
-                    data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}_{max_positions}.pt")
-                    torch.save(save_dict, data_path)
+                    data_path = os.path.join(data_newest_gen_dir, f"positions_{new_shard_idx}_{max_positions}.pt.gz")
+                    
+                    with gzip.open(data_path, "wb", compresslevel=5) as f:
+                        torch.save(save_dict, f)
                     tqdm.write(f"Saved {max_positions} positions.")
                     
                     shard_states = shard_states[max_positions:]

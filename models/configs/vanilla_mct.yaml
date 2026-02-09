@@ -1,0 +1,10 @@
+model:
+  name: "vanilla_mct"
+  type: "rollout"
+
+mcts:
+  simulations: 100
+  c_puct: 1.0
+  lower_temperature_after : 10
+  high_temperature: 1.0
+  low_temperature: 0.0

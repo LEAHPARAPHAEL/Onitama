@@ -9,6 +9,7 @@ import itertools
 from game.board_utils import get_5_cards_with_fixed_start
 from tqdm import tqdm
 from game.board import Board
+import gzip
 import torch.nn.functional as F
 
 def extract_model_gen_idx(str : str):
@@ -64,10 +65,9 @@ def tournament(args):
                 if not competitor_name in log:
                     log[competitor_name] = {} 
         
-    num_competitors = len(competitors)
     competitors_names = competitors.keys()
     pairs = list(itertools.combinations(competitors_names, 2))
-    total_games = num_competitors * (num_competitors - 1) * rounds / 2
+    total_games = len(pairs) * rounds
 
     pbar = tqdm(desc = "Total games in tournament", total = total_games)
 
@@ -110,11 +110,13 @@ def tournament(args):
         model1 = OnitamaNet(config1).to(device)
         model2 = OnitamaNet(config2).to(device)
 
-        save_dict1 = torch.load(weights1, weights_only = False)
+        with gzip.open(os.path.join(model_dir, weights1), "rb") as f:
+            save_dict1 = torch.load(1, weights_only = False)
         model_state_dict1 = save_dict1["model_state_dict"]
         model1.load_state_dict(model_state_dict1)
 
-        save_dict2 = torch.load(weights2, weights_only = False)
+        with gzip.open(os.path.join(model_dir, weights2), "rb") as f:
+            save_dict2 = torch.load(f, weights_only = False)
         model_state_dict2 = save_dict2["model_state_dict"]
         model2.load_state_dict(model_state_dict2)
 
@@ -178,7 +180,7 @@ def tournament(args):
 
 
         tqdm.write(f'Match statistics :\n \
-                   {c1} -> [Wins : {log[c1][c2]["wins"]} | Draws : {log[c1][c2]["draws"]} | Losses : {log[c1][c2]["losses"]}]\n \
+                   {c1} -> [Wins : {log[c1][c2]["wins"]} | Draws : {log[c1][c2]["draws"]} | Losses : {log[c1][c2]["losses"]}]\n\
                     {c2} -> [Wins : {log[c2][c1]["wins"]} | Draws : {log[c2][c1]["draws"]} | Losses : {log[c2][c1]["losses"]}]')
         
         json.dump(log, open(log_file, "w"), indent=4)

@@ -9,10 +9,12 @@ from network.model import OnitamaNet
 import yaml
 import torch
 from mcts.batched_mcts import BatchedMCTS
+from mcts.mcts_rollout import MCTS_Rollout
 import torch.nn.functional as F
 import collections
 import random
-
+from agent.onitama_agent import OnitamaAgent
+from network.input import get_nn_input
 
 def extract_gen_idx(str : str):
     try:
@@ -79,10 +81,18 @@ class ModelManager:
                 try:
                     with open(cfg_file, 'r') as f:
                         data = yaml.safe_load(f)
-                        
-                    model_name = data.get("model", {}).get("name")
+                    model =  data.get("model", {})
+                    model_name = model.get("name")
+
                     if not model_name: continue
-                    
+                    if data.get("model",{}).get("type",None)== "rollout":
+                        self.available_models.append({
+                            "name": model_name,
+                            "config_path": cfg_file,
+                            "weight_path": None,
+                            "config_data": data
+                        })
+                        continue
                     # 2. Construct path to the model's specific weight folder
                     # Structure: ./models/weights/{model_name}/
                     target_folder = os.path.join(self.weight_path, model_name)
@@ -106,25 +116,17 @@ class ModelManager:
                             })
                 except Exception as e:
                     print(f"Error scanning {cfg_file}: {e}")
+            print([model["name"] for model in self.available_models])
 
     def load_model(self, index, num_simulations = 100):
         if 0 <= index < len(self.available_models):
             item = self.available_models[index]
-            try:
-                self.active_config = item['config_data']
-                self.active_model = OnitamaNet(self.active_config).to(self.device)
-                state_dict = torch.load(item["weight_path"], weights_only = False)
-                model_state_dict = state_dict["model_state_dict"]
-                self.active_model.load_state_dict(model_state_dict)
-                self.active_model.eval()
-
-                self.active_mcts = BatchedMCTS(self.active_model, self.active_config, self.device)
-                self.active_mcts.num_simulations = num_simulations
-
-                self.active_model_name = item['name']
-                return True
-            except Exception as e:
-                print(f"Failed to load model: {e}")
+            item_config = item["config_data"]
+            item_config["mcts"]["high_temperature"] = 0.0
+            item_config["mcts"]["low_temperature"] = 0.0
+            item_config["mcts"]["simulations"] = num_simulations
+            self.agent = OnitamaAgent(item_config,item["weight_path"],num_simulations=num_simulations)
+            return self.agent.loaded
         return False
 # ==========================================
 # 4. GUI CLASS
@@ -150,6 +152,10 @@ class OnitamaGUI:
         self.state = "MENU" # MENU, PLAYING, GAMEOVER
         self.human_is_blue = True 
         
+        # New Analysis State
+        self.ai_eval = 0.0 # Placeholder for network value (-1 to 1 or 0 to 1)
+        self.last_ai_move = None # Tuple (start_idx, end_idx)
+
         # Menu Data (Preserved between games)
         self.menu_random_cards = True
         self.menu_selected_model_idx = -1
@@ -163,10 +169,32 @@ class OnitamaGUI:
         self.selected_card_slot = None
         self.selected_piece_idx = None
         self.valid_targets = []
-        self.ui_rects = {} 
+        self.ui_rects = {}
+
+    def compute_network_value(self, board):
+        """
+        Placeholder for computing the game value from the network's perspective.
+        """
+        # TODO: Implement actual network inference here
+        # For now, return a random value between -1 (Loss) and 1 (Win)
+        if self.model_manager.agent.active_model is not None:
+            value = self.model_manager.agent.active_model(get_nn_input(board).unsqueeze(0).to(self.model_manager.agent.device))[1].item()
+        else:
+            value = 0.0
+        return value
 
     def run(self):
         while True:
+            # --- 1. AI Logic (Moved to start) ---
+            # We check for AI turn here so that the previous frame (with Human's move)
+            # has already been flipped to the display.
+            if self.state == "PLAYING" and self.board and not self.board.game_over:
+                self.ai_eval = self.compute_network_value(self.board)
+                is_human_turn = (self.board.turn == self.human_is_blue)
+                if not is_human_turn:
+                    self.handle_ai_turn()
+
+            # --- 2. Event Handling ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit(); sys.exit()
@@ -178,24 +206,20 @@ class OnitamaGUI:
                 elif self.state == "GAMEOVER":
                     self.handle_gameover_input(event)
 
+            # --- 3. Drawing ---
             self.screen.fill(C_BG)
             if self.state == "MENU":
                 self.draw_menu()
             else:
                 self.draw_game()
+                
+                # Check for Game Over logic update
+                if self.board and self.board.game_over:
+                    self.state = "GAMEOVER"
+                
                 # Draw Overlay if Game Over
                 if self.state == "GAMEOVER":
                     self.draw_gameover()
-                
-                # Check for Game Over logic update
-                if self.state == "PLAYING":
-                    if self.board.game_over:
-                        self.state = "GAMEOVER"
-                    else:
-                        # Trigger AI
-                        is_human_turn = (self.board.turn == self.human_is_blue)
-                        if not is_human_turn:
-                            self.handle_ai_turn()
 
             pygame.display.flip()
             self.clock.tick(60)
@@ -210,7 +234,7 @@ class OnitamaGUI:
         ratio = (x - min_x) / self.slider_rect.width
         
         # Map to range [50, 1500]
-        val = 50 + ratio * (1500 - 50)
+        val = 50 + ratio * (10000 - 50)
         self.menu_mcts_sims = int(val)
 
     # --- UPDATED START LOGIC ---
@@ -331,19 +355,52 @@ class OnitamaGUI:
 
     # --- PERSPECTIVE FIX IN DRAW_GAME (SCALED) ---
     def draw_game(self):
-        # Grid
+        # --- 0. Draw Background & Evaluation Text ---
+        
+        # Draw AI Value
+        val_text = f"Network Value: {self.ai_eval:.2f}"
+        # Color based on value: Red (bad for AI) -> White -> Green (good for AI)
+        # Assuming AI is usually P2 (Red) in logic, or just relative value.
+        # Let's just use standard text color for now.
+        txt_surf = self.bold_font.render(val_text, True, C_TEXT)
+        # Position centered above board (Board starts at Y=165)
+        txt_rect = txt_surf.get_rect(center=(BOARD_OFFSET_X + (5*SQUARE_SIZE)//2, BOARD_OFFSET_Y - 20))
+        self.screen.blit(txt_surf, txt_rect)
+
+        # --- 1. Draw Grid ---
         for r in range(5):
             for c in range(5):
                 rect = pygame.Rect(BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
                 pygame.draw.rect(self.screen, C_GRID, rect, 2)
                 if (r==0 or r==4) and c==2: pygame.draw.rect(self.screen, (220, 210, 190), rect)
 
-        # Pieces
+        # --- 2. Determine Perspective ---
         is_human_turn = (self.board.turn == self.human_is_blue)
         should_rotate = not is_human_turn
 
         def get_rot(b): return int(f"{b:025b}"[::-1], 2)
 
+        if self.last_ai_move is not None:
+            start, end = self.last_ai_move
+            
+            # CRITICAL FIX:
+            # The AI stores the move in its own perspective (0-4 is bottom).
+            # But visually, the AI is at the top (20-24).
+            # We must flip the indices (24 - i) to map AI's logical bottom to Visual Top.
+            vis_start = 24 - start
+            vis_end = 24 - end
+            
+            for idx in [vis_start, vis_end]:
+                r, c = idx // 5, idx % 5
+                cx = BOARD_OFFSET_X + c * SQUARE_SIZE
+                cy = BOARD_OFFSET_Y + r * SQUARE_SIZE
+                
+                # Orange/Yellow Highlight
+                s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+                s.fill((255, 165, 0, 100)) # Orange with alpha
+                self.screen.blit(s, (cx, cy))
+
+        # --- 4. Draw Pieces ---
         pb, mb = self.board.player_disciples, self.board.player_master
         ob, om = self.board.opponent_disciples, self.board.opponent_master
 
@@ -354,7 +411,7 @@ class OnitamaGUI:
             self._draw_bits(pb, mb, C_P1 if self.human_is_blue else C_P2)
             self._draw_bits(ob, om, C_P2 if self.human_is_blue else C_P1)
 
-        # Cards
+        # --- 5. Draw Cards ---
         # Scaled Y Positions
         ai_y = 58  
         hum_y = 478 
@@ -376,7 +433,7 @@ class OnitamaGUI:
         
         self.render_card(self.board.side_card, side_x, side_y, True, "side")
 
-        # Selection/Target Highlights
+        # --- 6. Selection/Target Highlights (Human Turn) ---
         if self.selected_piece_idx is not None:
             vis = self.selected_piece_idx if not should_rotate else 24 - self.selected_piece_idx
             r, c = vis // 5, vis % 5
@@ -388,6 +445,19 @@ class OnitamaGUI:
             s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
             pygame.draw.circle(s, (100,255,100,100), (SQUARE_SIZE//2, SQUARE_SIZE//2), 12) # Scaled radius
             self.screen.blit(s, (BOARD_OFFSET_X + c*SQUARE_SIZE, BOARD_OFFSET_Y + r*SQUARE_SIZE))
+
+    def handle_gameover_input(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Check "New Game" button in overlay
+            # Scaled Dimensions from draw_gameover:
+            btn_w, btn_h = 200, 58
+            bx = (WINDOW_WIDTH - btn_w) // 2
+            by = (WINDOW_HEIGHT - btn_h) // 2 + 40
+            
+            if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(event.pos):
+                self.state = "MENU"
+                self.board = None # Reset board
+
 
     def draw_gameover(self):
         # Overlay
@@ -535,7 +605,7 @@ class OnitamaGUI:
         self.slider_rect = pygame.Rect(L_CX - 100, PANEL_Y + 65, 200, 16)
         pygame.draw.rect(self.screen, (200,200,200), self.slider_rect, border_radius=8)
         pygame.draw.rect(self.screen, (100,100,100), self.slider_rect, 2, border_radius=8)
-        ratio = (self.menu_mcts_sims - 50)/(1500-50)
+        ratio = (self.menu_mcts_sims - 50)/(10000-50)
         kx = self.slider_rect.left + ratio * self.slider_rect.width
         pygame.draw.circle(self.screen, C_MENU_BG, (int(kx), int(self.slider_rect.centery)), 8)
 
@@ -632,15 +702,14 @@ class OnitamaGUI:
     def handle_ai_turn(self):
         pygame.display.set_caption(f"AI ({self.model_manager.active_model_name}) is thinking...")
         pygame.event.pump()
+        # 2. Select Move
+        move = self.model_manager.agent.select_move(self.board)
         
+        # 3. Store move for highlighting (Start Index, End Index)
 
-        policy = self.model_manager.active_mcts.search_batch([self.board])[0]
+        self.last_ai_move = (move.from_idx, move.to_idx)
 
-        if self.model_manager.active_config["training"].get("mask_illegal_moves", False):
-            policy = F.relu(policy)
-        action_idx = torch.multinomial(policy, 1).item()
-        move = self.board.action_index_to_move(action_idx)
-
+        # 4. Play
         self.board.play_move(move)
 
 if __name__ == "__main__":

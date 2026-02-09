@@ -18,6 +18,7 @@ from bisect import bisect_right
 from train.train_utils import extract_gen_idx, extract_shard_idx, extract_model_steps, extract_positions
 import shutil
 import glob
+import gzip
 
 
 class WDLValueLoss(nn.Module):
@@ -51,7 +52,38 @@ class MaskIllegalMovesPolicyLoss(nn.Module):
 
         p_logits[illegal_mask] = -1.0e10
         return self.ce_loss(p_logits, clean_target)
-        
+    
+
+def swap_player_cards(states, policies):
+
+    new_states = states.clone()
+    new_policies = policies.clone()
+
+    card1_channel = states[..., 4, :, :].clone()
+    card2_channel = states[..., 5, :, :].clone()
+
+    new_states[..., 4, :, :] = card2_channel
+    new_states[..., 5, :, :] = card1_channel
+
+    new_policies[..., 0:625] = policies[..., 625:1250]
+    new_policies[..., 625:1250] = policies[..., 0:625]
+    
+    new_policies[..., 1250] = policies[..., 1251]
+    new_policies[..., 1251] = policies[..., 1250]
+
+    return new_states, new_policies
+
+def swap_opponent_cards(states):
+
+    new_states = states.clone()
+
+    card1_channel = states[..., 6, :, :].clone()
+    card2_channel = states[..., 7, :, :].clone()
+
+    new_states[..., 6, :, :] = card2_channel
+    new_states[..., 7, :, :] = card1_channel
+
+    return new_states
 
 
 class OnitamaStreamingDataset(IterableDataset):
@@ -76,7 +108,8 @@ class OnitamaStreamingDataset(IterableDataset):
 
         for filepath in my_files:
             try:
-                data = torch.load(filepath, weights_only=False)
+                with gzip.open(filepath, "rb") as f:
+                    data = torch.load(f, weights_only=False)
                 
                 states = data["states"]   
                 policies = data["policies"] 
@@ -93,9 +126,17 @@ class OnitamaStreamingDataset(IterableDataset):
                     policy = policies[idx]
                     value = values[idx]
 
-                    if self.use_data_augmentation and torch.rand(1).item() > 0.5:
-                        policy = policy[self.flip_mask]
-                        nn_input = torch.flip(nn_input, dims=[-1])
+                    if self.use_data_augmentation:
+                    
+                        if torch.rand(1).item() > 0.5:
+                            policy = policy[self.flip_mask]
+                            nn_input = torch.flip(nn_input, dims=[-1])
+
+                        if torch.rand(1).item() > 0.5:
+                            nn_input, policy = swap_player_cards(nn_input, policy)
+
+                        if torch.rand(1).item() > 0.5:
+                            nn_input = swap_opponent_cards(nn_input)
 
                     yield nn_input, policy, value
 
@@ -147,7 +188,8 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
 
     for filepath in tqdm(files, desc="Processing Inputs"):
         try:
-            data = torch.load(filepath, weights_only=False)
+            with gzip.open(filepath, "rb") as f:
+                data = torch.load(f, weights_only=False)
 
             num_items = data["states"].shape[0]
             
@@ -179,7 +221,7 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
     val_shards_paths = []
 
     for shard_idx in tqdm(range(num_shards), desc="Finalizing Shards"):
-        part_files = glob.glob(os.path.join(temp_dir, f"shard_{shard_idx}_part_*.pt"))
+        part_files = glob.glob(os.path.join(temp_dir, f"shard_{shard_idx}_part_*.pt.gz"))
         if not part_files:
             continue
             
@@ -189,7 +231,8 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
         
         for part in part_files:
             try:
-                part_data = torch.load(part, weights_only=False)
+                with gzip.open(part, "rb") as f:
+                    part_data = torch.load(f, weights_only=False)
                 all_states.append(part_data['states'])
                 all_policies.append(part_data['policies'])
                 all_values.append(part_data['values'])
@@ -213,11 +256,12 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
         
         def save_split(s, p, v, path):
             if len(s) > 0:
-                torch.save({
-                    "states": s,
-                    "policies": p,
-                    "values": v
-                }, path)
+                with gzip.open(path, "wb", compresslevel=5) as f:
+                    torch.save({
+                        "states": s,
+                        "policies": p,
+                        "values": v
+                    }, f)
                 return path
             return None
 
@@ -225,14 +269,14 @@ def shuffle_shards(files, shuffled_shards_dir, total_positions,
             merged_states[:split_idx], 
             merged_policies[:split_idx], 
             merged_values[:split_idx],
-            os.path.join(train_dir, f"shard_{shard_idx}.pt")
+            os.path.join(train_dir, f"shard_{shard_idx}.pt.gz")
         )
         
         v_path = save_split(
             merged_states[split_idx:], 
             merged_policies[split_idx:], 
             merged_values[split_idx:],
-            os.path.join(val_dir, f"shard_{shard_idx}.pt")
+            os.path.join(val_dir, f"shard_{shard_idx}.pt.gz")
         )
 
         if t_path: train_shards_paths.append(t_path)
@@ -250,14 +294,15 @@ def _flush_buckets_to_disk(buckets, temp_dir, flush_id):
             cat_policies = torch.cat(bucket_data['policies'])
             cat_values = torch.cat(bucket_data['values'])
             
-            filename = os.path.join(temp_dir, f"shard_{i}_part_{flush_id}.pt")
+            filename = os.path.join(temp_dir, f"shard_{i}_part_{flush_id}.pt.gz")
             
-            torch.save({
-                "states": cat_states,
-                "policies": cat_policies,
-                "values": cat_values
-            }, filename)
-    
+            with gzip.open(filename, "wb", compresslevel=5) as f:
+                torch.save({
+                    "states": cat_states,
+                    "policies": cat_policies,
+                    "values": cat_values
+                }, f)
+        
 
 # data v0 is generated from a random model
 # model v0 trains on data v0
@@ -383,7 +428,10 @@ def train(args):
     else:
         newest_model_file = model_gens_files[-1]
         newest_model_gen_idx = extract_gen_idx(newest_model_file)
-        save_dict = torch.load(os.path.join(model_dir, newest_model_file), weights_only = False)
+
+        with gzip.open(os.path.join(model_dir, newest_model_file), "rb") as f:
+            save_dict = torch.load(f, weights_only = False)
+
         model_state_dict = save_dict["model_state_dict"]
         model.load_state_dict(model_state_dict)
     
@@ -477,6 +525,8 @@ def train(args):
             loss = loss_p + loss_v
 
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
             total_loss += loss.item()
@@ -522,15 +572,17 @@ def train(args):
 
             if steps % checkpoint_steps == 0 or (steps == total_steps and total_steps % checkpoint_steps != 0):
                 remove_old_models(model_dir, newest_data_gen_idx)
-                checkpoint_path = model_path + f"_{steps}.pt"
+                checkpoint_path = model_path + f"_{steps}.pt.gz"
                 tqdm.write(f"\nSaving checkpoint for v{newest_data_gen_idx} at {checkpoint_path}")
-                torch.save({
-                    'steps': steps,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'training_over': steps == total_steps
-                }, checkpoint_path)
+                
+                with gzip.open(checkpoint_path, "wb", compresslevel=5) as f:
+                    torch.save({
+                        'steps': steps,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'training_over': steps == total_steps
+                    }, f)
 
             scheduler.step()
 

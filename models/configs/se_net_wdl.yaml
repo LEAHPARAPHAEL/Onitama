@@ -1,5 +1,5 @@
 model:
-  name: "se_net"
+  name: "se_net_wdl"
   num_res_blocks: 6 
   num_channels: 96        
   input_planes: 9        
@@ -10,12 +10,12 @@ model:
   value_head_hidden: 128
   dropout: 0.0
   keep_latest: 10
-  wdl : false
+  wdl : true
   use_se: true
   se_factor: 2
 
 training:
-  epochs: 10
+  epochs: 20
   total_steps : null
   checkpoint_steps: null
   test_steps: null
@@ -42,7 +42,7 @@ data:
   batch_size : 64
 
 mcts:
-  simulations: 400
+  simulations: 100
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0
