@@ -9,6 +9,9 @@ import os
 import yaml
 from mcts.batched_mcts import BatchedMCTS
 import torch.nn.functional as F
+import gzip
+import shutil
+from tqdm import tqdm
 
 def create_horizontal_flip_mask():
     mask = torch.arange(1252, dtype=torch.long)
@@ -105,8 +108,56 @@ def check():
     print(board)
 
 
+
+
+def compress_dataset_recursive(root_dir, compress_level=5):
+    """
+    Recursively finds all .pt files in root_dir, compresses them to .pt.gz,
+    and removes the original .pt file.
+    """
+    print(f"Scanning {root_dir} for .pt files...")
+    
+    files_to_compress = []
+    
+    # 1. Scan the directory tree
+    for dirpath, _, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if filename.endswith(".pt") and not filename.endswith(".gz"):
+                full_path = os.path.join(dirpath, filename)
+                files_to_compress.append(full_path)
+    
+    print(f"Found {len(files_to_compress)} files. Starting compression...")
+
+    # 2. Compress files
+    for file_path in tqdm(files_to_compress, desc="Compressing"):
+        gz_path = file_path + ".gz"
+        
+        try:
+            # Open original file (Read Binary)
+            with open(file_path, 'rb') as f_in:
+                # Open new GZIP file (Write Binary)
+                with gzip.open(gz_path, 'wb', compresslevel=compress_level) as f_out:
+                    # Stream copy (Low RAM usage)
+                    shutil.copyfileobj(f_in, f_out)
+            
+            # 3. Verify and Delete original
+            # Only delete if the new file actually exists and has size
+            if os.path.exists(gz_path) and os.path.getsize(gz_path) > 0:
+                os.remove(file_path)
+            else:
+                print(f"Warning: Compression failed for {file_path}, keeping original.")
+                
+        except Exception as e:
+            print(f"Error compressing {file_path}: {e}")
+            # Clean up partial file if it exists
+            if os.path.exists(gz_path):
+                os.remove(gz_path)
+
+    print("Compression complete!")
+
 if __name__ == "__main__":
     #test()
+    compress_dataset_recursive("models")
 
     '''
     # --- Usage    ---

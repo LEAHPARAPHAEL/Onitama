@@ -1,0 +1,20 @@
+tournament:
+  name: "tournament"
+  max_nodes: 200
+  rounds: 200
+  batch_size: 64
+
+models:
+  resnet_4_64: 
+    config: "resnet.yaml"
+    start_gen: 0
+    end_gen: 12
+    step_gen: 3
+
+  se_net:
+    config: "se_net.yaml"
+    start_gen: 0
+    end_gen: 12
+    step_gen: 3
+
+  
