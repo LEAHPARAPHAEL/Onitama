@@ -15,7 +15,7 @@ model:
   se_factor: 2
 
 training:
-  epochs: 20
+  epochs: 5
   total_steps : null
   checkpoint_steps: null
   test_steps: null
