@@ -38,7 +38,6 @@ class MSEValueLoss(nn.Module):
         self.mse_loss = nn.MSELoss()
 
     def forward(self, preds, targets):
-
         return self.mse_loss(preds.view(-1), targets.view(-1))
     
 class MaskIllegalMovesPolicyLoss(nn.Module):
@@ -49,7 +48,6 @@ class MaskIllegalMovesPolicyLoss(nn.Module):
     def forward(self, p_logits, target_p):
         illegal_mask = target_p < -0.5
         clean_target = F.relu(target_p) 
-
         p_logits[illegal_mask] = -1.0e10
         return self.ce_loss(p_logits, clean_target)
     

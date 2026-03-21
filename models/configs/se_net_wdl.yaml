@@ -22,7 +22,7 @@ training:
   warmup_steps: 1000
 
   learning_rate: 0.01
-  lr_schedule : [4, 8]
+  lr_schedule : [1,3]
 
   weight_decay: 0.0005
   batch_size: 64
