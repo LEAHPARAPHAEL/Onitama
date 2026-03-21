@@ -15,19 +15,19 @@ model:
   se_factor: 2
 
 training:
-  epochs: 10
+  epochs: 5
   total_steps : null
   checkpoint_steps: null
   test_steps: null
   warmup_steps: 1000
 
   learning_rate: 0.01
-  lr_schedule : [4, 8]
+  lr_schedule : [1,3]
 
   weight_decay: 0.0005
   batch_size: 64
   train_proportion: 0.9
-  include_old_gens: 10
+  include_old_gens: 5
   momentum: 0.9
   nesterov: true
   use_data_augmentation: true
