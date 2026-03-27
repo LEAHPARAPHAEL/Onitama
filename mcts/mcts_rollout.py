@@ -8,15 +8,12 @@ from game.board import Board
 
 class MCTS_Rollout:
     def __init__(self, config):
-        mcts_config = config['mcts']
-        self.num_simulations = mcts_config.get('simulations', 100)
-
-        self.high_temperature = mcts_config.get('high_temperature', 1.0)
-        self.low_temperature = mcts_config.get('low_temperature', 0.0)
-
-        self.lower_temperature_after = mcts_config.get('lower_temperature_after', 10)
-        self.c_puct = mcts_config.get('c_puct', 1.0)
-
+        self.num_simulations = config.get('simulations', 800)
+        self.temperature = config.get('temperature', 0.05)
+        self.inverse_temperature = 1. / self.temperature
+        self.c_puct = config.get('c_puct', 1.0)
+        self.num_rollouts_per_simulation = config.get('num_rollouts_per_simulation', 100)
+        self.num_nodes_to_explore_at_expansion = config.get('num_nodes_to_explore_at_expansion', 5)
 
     def search_batch(self, boards):
         '''
@@ -37,33 +34,28 @@ class MCTS_Rollout:
             
         action_probs = torch.zeros(1252)
         
-        if root_board.turn_count >= self.lower_temperature_after:
-            temperature = self.low_temperature
-        else:
-            temperature = self.high_temperature
-
-        if temperature == 0:
-            best_action_idx = max(root.children, key=lambda k: root.children[k].visit_count)
-            action_probs[best_action_idx] = 1.0
-
-        else:
-            total_visits = sum(c.visit_count ** temperature for c in root.children.values())
-            
-            assert(total_visits != 0)
-
-            for action_idx, child in root.children.items():
-                action_probs[action_idx] = (child.visit_count ** temperature) / total_visits
+        total_visits = sum(child.visit_count ** self.inverse_temperature for child in root.children.values())
+        
+        for action_idx, child in root.children.items():
+            action_probs[action_idx] = (child.visit_count ** self.inverse_temperature) / total_visits
             
         return action_probs
 
     def random_rollout(self,board : Board):
+        current_player = board.turn
+        rollout_board = board.clone()
         while True:
-            if board.is_game_over():
-                return board.get_result()
+            if rollout_board.is_game_over():
+                if rollout_board.turn == current_player:
+                    ## current player lost
+                    return rollout_board.get_result()
+                else:
+                    ## current player won
+                    return -rollout_board.get_result()
             
-            legal_moves = board.get_legal_moves()
+            legal_moves = rollout_board.get_legal_moves()
             chosen_move = random.choice(legal_moves)
-            board.play_move(chosen_move)
+            rollout_board.play_move(chosen_move)
 
     def _run_simulation(self, node, board):
         """
@@ -80,12 +72,20 @@ class MCTS_Rollout:
                 node.backpropagate(result)
                 return
 
+        #Expanding node with all valid moves
         legal_moves = board.get_legal_moves()
+        legal_moves_idx = [board.move_to_action_index(move) for move in legal_moves]
+        node.expand(legal_moves_idx)
 
+        #Selecting a random move for rollout
         chosen_move = random.choice(legal_moves)
+        child = node.children[board.move_to_action_index(chosen_move)]
 
-        child = node.expand(board.move_to_action_index(chosen_move))
+        ## Evaluating move value
         board.play_move(chosen_move)
-        value = self.random_rollout(board)
-        child.backpropagate(value)
+        avg_value = 0
+        for i in range(self.num_rollouts_per_simulation):
+            avg_value += self.random_rollout(board)
+        avg_value /= self.num_rollouts_per_simulation
 
+        child.backpropagate(avg_value)

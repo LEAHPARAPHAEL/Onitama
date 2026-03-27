@@ -8,3 +8,5 @@ mcts:
   lower_temperature_after : 10
   high_temperature: 1.0
   low_temperature: 0.0
+  num_rollouts_per_simulation: 10
+  num_nodes_to_explore_at_expansion: 5

@@ -42,15 +42,15 @@ class MCTSNode_Rollout:
 
         return best_action, best_child
 
-    def expand(self, move_idx):
+    def expand(self, valid_moves_idx):
         """
         Expands the node by creating children for all valid actions.
         policy_probs: A dictionary {action_index: probability} 
                       already masked and normalized by the MCTS driver.
         """
         self.is_expanded = True
-        self.children[move_idx] = MCTSNode_Rollout(parent=self, mct = True)
-        return self.children[move_idx]
+        for move_idx in valid_moves_idx:
+            self.children[move_idx] = MCTSNode_Rollout(parent=self, mct = True)
         
 
     def backpropagate(self, value):
