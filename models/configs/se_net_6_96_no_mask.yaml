@@ -1,5 +1,5 @@
 model:
-  name: "se_net_6_96"
+  name: "se_net_6_96_no_mask"
   num_res_blocks: 6 
   num_channels: 96        
   input_planes: 9        
@@ -15,6 +15,7 @@ model:
   se_factor: 2
 
 training:
+  cards: "standard"
   epochs: 5
   total_steps : null
   checkpoint_steps: null

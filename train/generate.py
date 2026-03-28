@@ -37,6 +37,7 @@ def generate(args):
     include_old_gens = config["training"].get("include_old_gens", 5)
     batch_size = data_config.get("batch_size", 64)
     mask_illegal_moves = config["training"].get("mask_illegal_moves", False)
+    cards = config["training"].get("cards", "standard")
 
     required_shards = total_positions // positions_per_shard
 
@@ -88,7 +89,7 @@ def generate(args):
         return
 
     batched_mcts = BatchedMCTS(model, config, device)
-    boards = [Board(get_5_random_cards()) for _ in range(batch_size)]
+    boards = [Board(get_5_random_cards(cards = cards)) for _ in range(batch_size)]
 
     game_states = [[] for _ in range(batch_size)]
     game_policies = [[] for _ in range(batch_size)]
