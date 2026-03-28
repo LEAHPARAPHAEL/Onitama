@@ -31,6 +31,7 @@ def tournament(args):
 
     tournament_config = config["tournament"]
     tournament_name = tournament_config["name"]
+    cards = tournament_config.get("cards", "standard")
 
     # Should be divisible by 4
     rounds = tournament_config.get("rounds", 100)
@@ -121,8 +122,8 @@ def tournament(args):
         model2.load_state_dict(model_state_dict2)
 
 
-        blue_boards = [Board(get_5_cards_with_fixed_start(blue = True)) for _ in range(quarter_round)]
-        red_boards = [Board(get_5_cards_with_fixed_start(blue = False)) for _ in range(quarter_round)]
+        blue_boards = [Board(get_5_cards_with_fixed_start(blue = True, cards = cards)) for _ in range(quarter_round)]
+        red_boards = [Board(get_5_cards_with_fixed_start(blue = False, cards = cards)) for _ in range(quarter_round)]
         half_round_boards = blue_boards + red_boards
 
         mcts1 = BatchedMCTS(model1, config1, device)

@@ -15,6 +15,7 @@ model:
   se_factor: 2
 
 training:
+  cards: "standard"
   epochs: 5
   total_steps : null
   checkpoint_steps: null
