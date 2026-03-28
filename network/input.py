@@ -1,5 +1,5 @@
 import numpy as np
-from game.board_utils import CARDS
+from game.board_utils import ALL_CARDS
 import torch
 
 def get_nn_input(board):
@@ -19,7 +19,7 @@ def get_nn_input(board):
     fill_plane(3, board.opponent_master)
     
     def fill_card_pattern(plane_idx, card_id):
-        offsets = CARDS[card_id]["pattern"]
+        offsets = ALL_CARDS[card_id]["pattern"]
         center_r, center_c = 2, 2 
         planes[plane_idx, center_r, center_c] = 1.0 
         
@@ -65,7 +65,7 @@ def get_nn_training_data(data):
     fill_plane(3, opponent_master)
     
     def fill_card_pattern(plane_idx, card_id):
-        offsets = CARDS[card_id]["pattern"]
+        offsets = ALL_CARDS[card_id]["pattern"]
         center_r, center_c = 2, 2 
         planes[plane_idx, center_r, center_c] = 1.0 
         

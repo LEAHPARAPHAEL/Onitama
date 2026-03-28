@@ -153,15 +153,16 @@ class OnitamaGUI:
         self.human_is_blue = True 
         
         # New Analysis State
-        self.ai_eval = 0.0 
-        self.last_ai_move = None 
+        self.ai_eval = 0.0 # Placeholder for network value (-1 to 1 or 0 to 1)
+        self.last_ai_move = None # Tuple (start_idx, end_idx)
 
-        # Menu Data (Updated for 32 cards and 4 modes)
-        self.card_mode = "STANDARD" # Modes: "STANDARD", "EXTENSION", "ALL", "CUSTOM"
+        # Menu Data (Preserved between games)
+        self.menu_random_cards = True
         self.menu_selected_model_idx = -1
-        self.menu_card_assignments = {i: None for i in range(32)} # Expanded to 32
+        self.menu_card_assignments = {i: None for i in range(16)}
         self.menu_mcts_sims = 800
         self.slider_dragging = False
+        # Initial placeholder, updated in draw_menu/handle_input
         self.slider_rect = pygame.Rect(330, 430, 165, 16) 
         
         # Game Data
@@ -246,21 +247,11 @@ class OnitamaGUI:
             return
 
         final_cards = []
-        
-        # Random generation based on selected mode
-        if self.card_mode == "STANDARD":
-            pool = list(range(16))
-            random.shuffle(pool)
-            final_cards = pool[:5]
-        elif self.card_mode == "EXTENSION":
-            pool = list(range(16, 32))
-            random.shuffle(pool)
-            final_cards = pool[:5]
-        elif self.card_mode == "ALL":
-            pool = list(range(32))
-            random.shuffle(pool)
-            final_cards = pool[:5]
-        else: # CUSTOM
+        if self.menu_random_cards:
+            all_c = list(range(16))
+            random.shuffle(all_c)
+            final_cards = all_c[:5]
+        else:
             blues = [k for k,v in self.menu_card_assignments.items() if v == 'blue']
             reds = [k for k,v in self.menu_card_assignments.items() if v == 'red']
             side = [k for k,v in self.menu_card_assignments.items() if v == 'side']
@@ -271,60 +262,6 @@ class OnitamaGUI:
             self.state = "PLAYING"
         except Exception as e:
             print(f"Error instantiating Board: {e}")
-
-    def can_start_game(self):
-        if self.menu_selected_model_idx == -1: return False
-        
-        # If it's a random mode, we can always start
-        if self.card_mode != "CUSTOM": return True
-        
-        # Validate custom card assignments
-        b_count, r_count, s_count = 0, 0, 0
-        for v in self.menu_card_assignments.values():
-            if v == 'blue': b_count += 1
-            elif v == 'red': r_count += 1
-            elif v == 'side': s_count += 1
-        return b_count == 2 and r_count == 2 and s_count == 1
-
-    def render_card(self, card_id, x, y, interact, tag=None, rotate_pattern=False):
-        rect = pygame.Rect(x, y, CARD_W, CARD_H)
-        if interact and tag: self.ui_rects[tag] = rect
-        
-        col = C_MENU_PANEL
-        if interact and self.selected_card_slot is not None and tag and "p1_card" in tag:
-            if int(tag.split("_")[-1]) == self.selected_card_slot: 
-                col = (255, 230, 150)
-            
-        pygame.draw.rect(self.screen, col, rect, border_radius=8)
-        pygame.draw.rect(self.screen, (0,0,0), rect, 2, border_radius=8)
-        
-        # Now fetches from ALL_CARDS to avoid KeyError for extension cards
-        name_surf = self.bold_font.render(ALL_CARDS[card_id]["name"], True, C_TEXT)
-        name_rect = name_surf.get_rect(center=(x + CARD_W//2, y + 16))
-        self.screen.blit(name_surf, name_rect)
-        
-        gw = CARD_MINI_GRID
-        grid_center_x = x + CARD_W // 2
-        grid_center_y = y + CARD_H // 2 + 8 
-        
-        for r in range(-2, 3):
-            for c in range(-2, 3):
-                draw_r = -r if rotate_pattern else r
-                draw_c = -c if rotate_pattern else c
-                
-                cell_x = grid_center_x + c*gw - gw//2
-                cell_y = grid_center_y + r*gw - gw//2
-                
-                pygame.draw.rect(self.screen, (200,200,200), (cell_x, cell_y, gw, gw), 1)
-                
-                # Piece Contrast
-                # Center Piece
-                if draw_r == 0 and draw_c == 0:
-                    pygame.draw.rect(self.screen, (30, 30, 30), (cell_x+2, cell_y+2, gw-4, gw-4))
-                
-                # Move Piece (from ALL_CARDS)
-                elif (draw_r, draw_c) in ALL_CARDS[card_id]["pattern"]:
-                    pygame.draw.rect(self.screen, (160, 160, 160), (cell_x+2, cell_y+2, gw-4, gw-4))
 
 
     def cycle_card_assignment(self, card_id):
@@ -348,6 +285,15 @@ class OnitamaGUI:
         if found_valid: self.menu_card_assignments[card_id] = cycle_order[next_idx]
         else: self.menu_card_assignments[card_id] = None
 
+    def can_start_game(self):
+        if self.menu_selected_model_idx == -1: return False
+        if self.menu_random_cards: return True
+        b_count, r_count, s_count = 0, 0, 0
+        for v in self.menu_card_assignments.values():
+            if v == 'blue': b_count += 1
+            elif v == 'red': r_count += 1
+            elif v == 'side': s_count += 1
+        return b_count == 2 and r_count == 2 and s_count == 1
 
     def handle_game_input(self, event):
         # Allow input only if it is Human's Turn
@@ -600,23 +546,20 @@ class OnitamaGUI:
                 self.update_slider_value(pos[0])
                 return
 
-            # 3. Card Mode Cycle Button
+            # 3. Random Checkbox
             if pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32).collidepoint(pos):
-                modes = ["STANDARD", "EXTENSION", "ALL", "CUSTOM"]
-                self.card_mode = modes[(modes.index(self.card_mode) + 1) % 4]
-                # Reset assignments if changing away from custom
-                if self.card_mode != "CUSTOM": 
-                    self.menu_card_assignments = {i: None for i in range(32)}
+                self.menu_random_cards = not self.menu_random_cards
+                if self.menu_random_cards: self.menu_card_assignments = {i: None for i in range(16)}
                 return
 
-            # 4. Card Grid (Now 32 cards: 4 cols x 8 rows)
-            if self.card_mode == "CUSTOM":
+            # 4. Card Grid
+            if not self.menu_random_cards:
                 start_x = L_CX - 180
                 start_y = PANEL_Y + 156
-                for i in range(32):
+                for i in range(16):
                     r, c = i // 4, i % 4
-                    cx, cy = start_x + c * 90, start_y + r * 45
-                    if pygame.Rect(cx, cy, 82, 35).collidepoint(pos):
+                    cx, cy = start_x + c * 90, start_y + r * 50
+                    if pygame.Rect(cx, cy, 82, 40).collidepoint(pos):
                         self.cycle_card_assignment(i); return
 
             # --- RIGHT PANEL MODELS & START ---
@@ -666,30 +609,30 @@ class OnitamaGUI:
         kx = self.slider_rect.left + ratio * self.slider_rect.width
         pygame.draw.circle(self.screen, C_MENU_BG, (int(kx), int(self.slider_rect.centery)), 8)
 
-        # 3. Card Mode Cycle Button
-        mode_rect = pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32)
-        pygame.draw.rect(self.screen, (230,230,230), mode_rect, border_radius=5)
-        pygame.draw.rect(self.screen, (0,0,0), mode_rect, 2, border_radius=5)
-        m_lbl = f"Cards: {self.card_mode}"
-        m_surf = self.bold_font.render(m_lbl, True, C_TEXT)
-        self.screen.blit(m_surf, m_surf.get_rect(center=mode_rect.center))
+        # 3. Random Cards Checkbox
+        rnd_rect = pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32)
+        cb_rect = pygame.Rect(rnd_rect.x, rnd_rect.centery - 8, 16, 16)
+        pygame.draw.rect(self.screen, (255,255,255), cb_rect)
+        pygame.draw.rect(self.screen, (0,0,0), cb_rect, 2)
+        if self.menu_random_cards: 
+            pygame.draw.rect(self.screen, (50,50,50), cb_rect.inflate(-4,-4))
+        rnd_txt = self.font.render("Random Cards", True, C_TEXT)
+        self.screen.blit(rnd_txt, (cb_rect.right + 8, cb_rect.y - 2))
 
-        # 4. Card Grid (32 cards, compact layout)
-        if self.card_mode == "CUSTOM":
+        # 4. Card Grid
+        if not self.menu_random_cards:
             start_x = L_CX - 180
             start_y = PANEL_Y + 156
-            for i in range(32):
+            for i in range(16):
                 r, c = i//4, i%4
-                cx, cy = start_x + c*90, start_y + r*45
+                cx, cy = start_x + c*90, start_y + r*50
                 asn = self.menu_card_assignments[i]
                 bg = (180,200,255) if asn=='blue' else (255,180,180) if asn=='red' else (200,200,200) if asn=='side' else (240,240,240)
-                pygame.draw.rect(self.screen, bg, (cx,cy,82,35), border_radius=4)
-                pygame.draw.rect(self.screen, (100,100,100), (cx,cy,82,35), 1, border_radius=4)
-                
-                # Fetching from ALL_CARDS
-                c_name = ALL_CARDS[i]['name']
+                pygame.draw.rect(self.screen, bg, (cx,cy,82,40), border_radius=4)
+                pygame.draw.rect(self.screen, (100,100,100), (cx,cy,82,40), 1, border_radius=4)
+                c_name = CARDS[i]['name']
                 if len(c_name) > 10: c_name = c_name[:9] + "."
-                self.screen.blit(self.font.render(c_name, True, C_TEXT), (cx+4, cy+10))
+                self.screen.blit(self.font.render(c_name, True, C_TEXT), (cx+4, cy+12))
 
         # --- RIGHT PANEL: MODELS & START ---
         
@@ -717,6 +660,44 @@ class OnitamaGUI:
         st_txt = self.title_font.render("START", True, (255,255,255))
         self.screen.blit(st_txt, st_txt.get_rect(center=btn_rect.center))
 
+    def render_card(self, card_id, x, y, interact, tag=None, rotate_pattern=False):
+        rect = pygame.Rect(x, y, CARD_W, CARD_H)
+        if interact and tag: self.ui_rects[tag] = rect
+        
+        col = C_MENU_PANEL
+        if interact and self.selected_card_slot is not None and tag and "p1_card" in tag:
+            if int(tag.split("_")[-1]) == self.selected_card_slot: 
+                col = (255, 230, 150)
+            
+        pygame.draw.rect(self.screen, col, rect, border_radius=8)
+        pygame.draw.rect(self.screen, (0,0,0), rect, 2, border_radius=8)
+        
+        name_surf = self.bold_font.render(CARDS[card_id]["name"], True, C_TEXT)
+        name_rect = name_surf.get_rect(center=(x + CARD_W//2, y + 16))
+        self.screen.blit(name_surf, name_rect)
+        
+        gw = CARD_MINI_GRID
+        grid_center_x = x + CARD_W // 2
+        grid_center_y = y + CARD_H // 2 + 8 
+        
+        for r in range(-2, 3):
+            for c in range(-2, 3):
+                draw_r = -r if rotate_pattern else r
+                draw_c = -c if rotate_pattern else c
+                
+                cell_x = grid_center_x + c*gw - gw//2
+                cell_y = grid_center_y + r*gw - gw//2
+                
+                pygame.draw.rect(self.screen, (200,200,200), (cell_x, cell_y, gw, gw), 1)
+                
+                # Piece Contrast
+                # Center Piece (Darker - almost black)
+                if draw_r == 0 and draw_c == 0:
+                    pygame.draw.rect(self.screen, (30, 30, 30), (cell_x+2, cell_y+2, gw-4, gw-4))
+                
+                # Move Piece (Lighter - Grey)
+                elif (draw_r, draw_c) in CARDS[card_id]["pattern"]:
+                    pygame.draw.rect(self.screen, (160, 160, 160), (cell_x+2, cell_y+2, gw-4, gw-4))
 
     def handle_ai_turn(self):
         pygame.display.set_caption(f"AI ({self.model_manager.active_model_name}) is thinking...")
