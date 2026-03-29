@@ -1,5 +1,5 @@
 model:
-  name: "shallow_se_net_6_96"
+  name: "shallow_se_net_6_96_no_aug"
   num_res_blocks: 6 
   num_channels: 96        
   input_planes: 9        
@@ -31,7 +31,7 @@ training:
   include_old_gens: 5
   momentum: 0.9
   nesterov: true
-  use_data_augmentation: true
+  use_data_augmentation: false
   mask_illegal_moves: true
   train_workers: 2
   val_workers: 2

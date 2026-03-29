@@ -103,6 +103,7 @@ def tournament(args):
         weights1, config_file1 = competitors[c1]
         weights2, config_file2 = competitors[c2]
 
+
         config1 = yaml.safe_load(open(config_file1, "r"))
         config2 = yaml.safe_load(open(config_file2, "r"))
         mask1 = config1["training"].get("mask_illegal_moves", False)
@@ -111,12 +112,12 @@ def tournament(args):
         model1 = OnitamaNet(config1).to(device)
         model2 = OnitamaNet(config2).to(device)
 
-        with gzip.open(os.path.join(model_dir, weights1), "rb") as f:
-            save_dict1 = torch.load(1, weights_only = False)
+        with gzip.open(weights1, "rb") as f:
+            save_dict1 = torch.load(f, weights_only = False)
         model_state_dict1 = save_dict1["model_state_dict"]
         model1.load_state_dict(model_state_dict1)
 
-        with gzip.open(os.path.join(model_dir, weights2), "rb") as f:
+        with gzip.open(weights2, "rb") as f:
             save_dict2 = torch.load(f, weights_only = False)
         model_state_dict2 = save_dict2["model_state_dict"]
         model2.load_state_dict(model_state_dict2)

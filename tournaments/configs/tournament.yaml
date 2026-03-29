@@ -8,14 +8,14 @@ tournament:
 models:
   resnet_6_96: 
     config: "resnet_6_96.yaml"
-    start_gen: 0
+    start_gen: 12
     end_gen: 12
-    step_gen: 3
+    step_gen: 1
 
-  se_net_6_96:
-    config: "se_net_6_96.yaml"
-    start_gen: 0
-    end_gen: 12
-    step_gen: 3
+  shallow_se_net_6_96:
+    config: "shallow_se_net_6_96.yaml"
+    start_gen: 20
+    end_gen: 20
+    step_gen: 1
 
   
