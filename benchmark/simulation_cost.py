@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 def run_benchmark(args):
-    config_path = args.config
+    config_path = os.path.join("benchmark", "configs", args.config)
     log_file = args.output
 
     config = yaml.safe_load(open(config_path, "r"))
@@ -70,7 +70,7 @@ def run_benchmark(args):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Number of simulations VS time")
-    parser.add_argument("--config", "-c", type = str, default = "benchmark/simulation_cost.yaml", 
+    parser.add_argument("--config", "-c", type = str, default = "simulation_cost.yaml", 
                         help = "path to the config file")
     parser.add_argument("--output", "-o", type = str, default = "benchmark/output_simulation_cost.json", 
                         help = "path of the output")

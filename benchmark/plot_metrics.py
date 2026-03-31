@@ -6,16 +6,17 @@ import os
 
 
 def plot_json(args):
-    config_path = args.config
-    output_path = args.output
+    config_path = os.path.join("benchmark", "configs", args.config)
 
     config = yaml.safe_load(open(config_path, "r"))
+
+    output_path = config["out"]
 
     log_files = [log_file for log_file in config["logs"]]
 
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'gray', 'cyan', 'black', 'yellow'][:len(log_files)]
 
-    fig, axes = plt.subplots(nrows = 1, ncols = 3, figsize = (15, 5))
+    fig, axes = plt.subplots(nrows = 1, ncols = 3, figsize = (15, 4))
     axes = axes.flatten()
 
     for log_file, color in zip(log_files, colors):
@@ -57,7 +58,6 @@ def plot_json(args):
     axes[2].grid(True, alpha = 0.3)
     axes[2].legend()
 
-    plt.title("Training metrics for different models depending on the generation index")
     plt.tight_layout()
 
     plt.savefig(output_path)
@@ -66,10 +66,8 @@ def plot_json(args):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Number of simulations VS time")
-    parser.add_argument("--config", "-c", type = str, default = "benchmark/training_metrics.yaml", 
+    parser.add_argument("--config", "-c", type = str, default = "training_metrics.yaml", 
                         help = "path to the config file")
-    parser.add_argument("--output", "-o", type = str, default = "plots/training_metrics.png", 
-                        help = "path of the output")
     
     args = parser.parse_args()
 

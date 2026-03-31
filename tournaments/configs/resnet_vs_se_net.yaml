@@ -1,0 +1,21 @@
+tournament:
+  name: "resnet_vs_se_net"
+  max_nodes: 400
+  rounds: 500
+  batch_size: 64
+  cards: standard
+
+models:
+  resnet_6_96: 
+    config: "resnet_6_96.yaml"
+    start_gen: 12
+    end_gen: 12
+    step_gen: 1
+
+  se_net_6_96:
+    config: "se_net_6_96.yaml"
+    start_gen: 12
+    end_gen: 12
+    step_gen: 1
+
+  
