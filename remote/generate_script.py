@@ -10,8 +10,10 @@ CONFIGS = ROOT / "models/configs"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", help="config/job name without .yaml")
+    ap.add_argument("--job", help="config/job name without .yaml")
+    ap.add_argument("--time", default = None, help="time")
     args = ap.parse_args()
+    print(f"args: {args}")
 
     cfg_path = CONFIGS / f"{args.job}.yaml"
     data = yaml.safe_load(cfg_path.read_text())
@@ -20,8 +22,8 @@ def main():
     text = TEMPLATE.read_text().replace("template", args.job)
     lines = []
     for line in text.splitlines():
-        if line.startswith("#SBATCH --time=") and "hours" in cr:
-            line = f"#SBATCH --time={int(cr['hours']):02d}:00:00"
+        if line.startswith("#SBATCH --time=") and args.time is not None:
+            line = f"#SBATCH --time={args.time}"
         elif line.startswith("#SBATCH --ntasks=") and "ntask" in cr:
             line = f"#SBATCH --ntasks={cr['ntask']}"
         elif line.startswith("#SBATCH --cpus-per-task=") and "cpus" in cr:
