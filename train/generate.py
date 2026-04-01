@@ -121,6 +121,8 @@ def generate(args):
             action_idx = torch.multinomial(policy, 1).item()
             move = board.action_index_to_move(action_idx)
 
+            batched_mcts.update_root(i, action_idx)
+
             game_over = board.play_move(move)
 
             if game_over:
@@ -146,6 +148,8 @@ def generate(args):
                 game_turns[i] = []
 
                 boards[i] = Board(get_5_random_cards())
+
+                batched_mcts.reset_tree(i)
                 
                 max_positions = min(positions_per_shard, total_positions - saved_positions)
                 if len(shard_states) >= max_positions:

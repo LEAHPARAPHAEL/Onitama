@@ -23,7 +23,7 @@ def does_exist_last_gen_model(num_gens, model_dir):
 def end_to_end(args):
     
     config = yaml.safe_load(open(os.path.join("models", "configs", args.config), "r"))
-    num_gens = config.get("generations", 10)
+    num_gens = config["generations"].get("n_generations", 20)
 
     model_name = config["model"]["name"]
     model_dir = os.path.join("models", "weights", model_name)

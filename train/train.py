@@ -20,6 +20,9 @@ import shutil
 import glob
 import gzip
 
+from torch.optim.lr_scheduler import LinearLR
+
+
 
 class WDLValueLoss(nn.Module):
     def __init__(self):
@@ -140,22 +143,6 @@ class OnitamaStreamingDataset(IterableDataset):
             except Exception as e:
                 print(f"Corrupt shard {filepath}: {e}")
 
-
-def get_lr_lambda(warmup_steps, milestones, gamma=0.1):
-    """
-    Returns a lambda function for the scheduler.
-    """
-    def lr_lambda(current_step):
-        if current_step < warmup_steps:
-            return float(current_step) / float(warmup_steps)
-        
-        if not milestones:
-            return 1.0
-        
-        index = bisect_right(milestones, current_step)
-        return gamma ** index
-
-    return lr_lambda
 
 
 
@@ -296,6 +283,17 @@ def _flush_buckets_to_disk(buckets, temp_dir, flush_id):
                 "policies": cat_policies,
                 "values": cat_values
             }, filename)
+
+
+def get_current_lr(gen_idx, config):
+    schedule = config['generations']['lr_breaks']
+    lrs = config['generations']['lrs']
+    
+    for i, milestone in enumerate(schedule):
+        if gen_idx < milestone:
+            return lrs[i]
+
+    return lrs[-1]
         
 
 # data v0 is generated from a random model
@@ -323,23 +321,19 @@ def train(args):
 
     train_config = config["training"]
     batch_size = train_config.get('batch_size', 64)
-    lr = train_config.get('learning_rate', 0.01)
     weight_decay = train_config.get('weight_decay', 1e-4)
     train_proportion = train_config.get('train_proportion', 0.9)
     train_workers = train_config.get('train_workers', 4)
     val_workers = train_config.get('val_workers', 2)
-    total_steps = train_config.get('total_steps', None)
-    test_steps = train_config.get('test_steps', None)
-    checkpoint_steps = train_config.get('checkpoint_steps', None)
+    tests_per_epoch = train_config.get('tests_per_epoch', 10)
+    checkpoints_per_epoch = train_config.get('checkpoints_per_epoch', 10)
     include_old_gens = train_config.get('include_old_gens', 5)
     momentum = train_config.get("momentum", 0.9)
     nesterov = train_config.get("nesterov", True)
     use_data_augmentation = train_config.get("use_data_augmentation", False)
-
     wdl = config["model"].get("wdl", False)
     mask_illegal_moves = train_config.get("mask_illegal_moves", False)
-    warmup_steps = train_config.get("warmup_steps", 1000)
-    lr_schedule = train_config.get("lr_schedule", None)
+    warmup_ratio = train_config.get("warmup_ratio", 10)
 
     max_positions_in_ram = config["data"].get("max_positions_in_ram", 100000)
 
@@ -380,44 +374,32 @@ def train(args):
     gen_key = f"v{newest_data_gen_idx}"
 
 
+    epochs = train_config.get("epochs", 10)
+    total_steps = epochs * total_positions // batch_size
 
-    # Compute number of steps in total
-    # Total steps overrides the number of epochs
-    # If not specified, infers the number of training steps required
-    if not total_steps:
-        epochs = train_config.get("epochs", 10)
-        total_steps = epochs * total_positions // batch_size
-        # If total steps is not specified, the warmup steps should be in terms of epochs
-        # This converts them to steps
-        if lr_schedule:
-            lr_schedule = list(map(lambda epoch: epoch * total_positions // batch_size, lr_schedule))
-
-    if not checkpoint_steps:
-        checkpoint_steps = total_steps // 10
-
-    if not test_steps:
-        test_steps = total_steps // 10
+    checkpoint_steps = total_positions // (batch_size * checkpoints_per_epoch)
+    test_steps = total_positions // (batch_size * tests_per_epoch)
+    warmup_steps = total_positions // (batch_size * warmup_ratio)
 
 
     # Load the model :
     model = OnitamaNet(config).to(device)
 
-    # Optimizer
-    #optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay, nesterov=nesterov)
 
 
-    lr_lambda = get_lr_lambda(warmup_steps=warmup_steps, milestones=lr_schedule) 
-    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lr_lambda)
+    target_lr = get_current_lr(newest_data_gen_idx, config)
 
-    # Look for the latest generation of models :
-    # Naming convention for models : v5_40000.pt, where 5 is the generation and 40000 the number of steps.
+    optimizer = torch.optim.SGD(model.parameters(), lr=target_lr, weight_decay = weight_decay, nesterov = nesterov, momentum = momentum)
+    scheduler = None
+
     model_gens_files = sorted(os.listdir(model_dir), key = extract_gen_idx)
 
     newest_model_gen_idx = 0
     steps = 0
+    
     if not model_gens_files:
         print("No model has been found. Training v0 from randomly initialized weights.")
+        scheduler = LinearLR(optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_steps)
 
     else:
         newest_model_file = model_gens_files[-1]
@@ -429,21 +411,29 @@ def train(args):
         model_state_dict = save_dict["model_state_dict"]
         model.load_state_dict(model_state_dict)
     
-        # Keep training current generation if the model gen index matches the data gen index.
         if newest_model_gen_idx == newest_data_gen_idx:
             steps = extract_model_steps(newest_model_file)
             print(f"Resuming training for generation v{newest_model_gen_idx} : steps {steps}/{total_steps}")
-            optimizer_state_dict = save_dict["optimizer_state_dict"]
-            scheduler_state_dict = save_dict["scheduler_state_dict"]
             
-            optimizer.load_state_dict(optimizer_state_dict)
-            scheduler.load_state_dict(scheduler_state_dict)
+            optimizer.load_state_dict(save_dict["optimizer_state_dict"])
+
+            if newest_data_gen_idx == 0:
+                scheduler = LinearLR(optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_steps)
+
+                scheduler_state_dict = save_dict.get("scheduler_state_dict")
+                if scheduler_state_dict is not None:
+                    scheduler.load_state_dict(scheduler_state_dict)
         
-        # Otherwise, take the newest model and initialize a new one from its weights.
         else:
             print(f"Starting a new training for generation v{newest_data_gen_idx}. Model initialized from v{newest_model_gen_idx}")
+            
+            optimizer.load_state_dict(save_dict["optimizer_state_dict"])
 
-        
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = target_lr
+
+            scheduler = None
+
     model_path = os.path.join(model_dir, gen_key)
 
 
@@ -525,6 +515,9 @@ def train(args):
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
+            if scheduler is not None:
+                scheduler.step()
+
             total_loss += loss.item()
             p_loss_acc += loss_p.item()
             v_loss_acc += loss_v.item()
@@ -544,6 +537,7 @@ def train(args):
                 val_p_acc_correct = 0
                 val_p_acc_total = 0
                 val_batch_count = 0
+                val_wdl_mse = 0
                 
                 with torch.no_grad():
                     for inputs, target_p, target_v in val_loader:
@@ -553,6 +547,13 @@ def train(args):
                         
                         l_p = policy_criterion(p_logits, target_p)
                         l_v = value_criterion(v_pred, target_v)
+
+                        if wdl:
+                            v_probs = torch.softmax(v_pred, dim = -1)
+                            v_pred_scalar = v_probs[:, 2] - v_probs[:, 0]
+                            l_scalar = nn.MSELoss()(v_pred_scalar, target_v.view(-1))
+                            val_wdl_mse += l_scalar.item()
+
                         val_loss_value += l_v.item()
                         val_loss_policy += l_p.item()
                         val_p_acc_correct += (p_logits.argmax(dim=-1) == target_p.argmax(dim=-1)).sum().item()
@@ -564,15 +565,25 @@ def train(args):
                 avg_val_p_acc = val_p_acc_correct / val_p_acc_total if val_p_acc_total > 0 else 0
 
                 tqdm.write(f"\nValidation : steps {steps}/{total_steps} \nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f} | Acc : {avg_val_p_acc:.4f}")
-                tqdm.write(f"\nLearning rate : {scheduler.get_last_lr()}")
+                current_lr = scheduler.get_last_lr()[0] if scheduler is not None else optimizer.param_groups[0]['lr']
+                tqdm.write(f"\nLearning rate : {current_lr:.5f}")
 
                 log[gen_key][str(steps)] = {}
-                log[gen_key][str(steps)]["Train policy"] = p_loss_acc / batch_count
-                log[gen_key][str(steps)]["Train value"] = v_loss_acc / batch_count
-                log[gen_key][str(steps)]["Train acc"] = train_p_acc
-                log[gen_key][str(steps)]["Val policy"] = avg_val_loss_policy
-                log[gen_key][str(steps)]["Val value"] = avg_val_loss_value
-                log[gen_key][str(steps)]["Val acc"] = avg_val_p_acc
+                log[gen_key][str(steps)]["Train Policy Loss"] = p_loss_acc / batch_count
+                log[gen_key][str(steps)]["Train Value Loss"] = v_loss_acc / batch_count
+                log[gen_key][str(steps)]["Train Policy Accuracy"] = train_p_acc
+                log[gen_key][str(steps)]["Validation Policy Loss"] = avg_val_loss_policy
+                log[gen_key][str(steps)]["Validation Policy Accuracy"] = avg_val_p_acc
+
+                if wdl:
+                    avg_val_wdl_mse = val_wdl_mse / val_batch_count if val_batch_count > 0 else 0
+                    log[gen_key][str(steps)]["Validation Value MSE"] = avg_val_wdl_mse
+                    log[gen_key][str(steps)]["Validation Value WDL"] = avg_val_loss_value
+
+                else:
+                    log[gen_key][str(steps)]["Validation Value MSE"] = avg_val_loss_value
+
+
 
                 json.dump(log, open(log_file, "w"), indent=4)
 
@@ -586,11 +597,9 @@ def train(args):
                         'steps': steps,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
-                        'scheduler_state_dict': scheduler.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
                         'training_over': steps == total_steps
                     }, f)
-
-            scheduler.step()
 
             if steps == total_steps:
                 break

@@ -112,6 +112,9 @@ def tournament(args):
         model1 = OnitamaNet(config1).to(device)
         model2 = OnitamaNet(config2).to(device)
 
+        model1.eval()
+        model2.eval()
+
         with gzip.open(weights1, "rb") as f:
             save_dict1 = torch.load(f, weights_only = False)
         model_state_dict1 = save_dict1["model_state_dict"]

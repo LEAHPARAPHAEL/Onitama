@@ -17,13 +17,29 @@ class BatchedMCTS:
         self.lower_temperature_after = mcts_config.get('lower_temperature_after', 10)
         self.c_puct = mcts_config.get('c_puct', 1.0)
 
-        mask_illegal_moves = config['training'].get('mask_illegal_moves', False)
-        if mask_illegal_moves:
+        self.mask_illegal_moves = config['training'].get('mask_illegal_moves', False)
+        if self.mask_illegal_moves:
             self.policy_default = -1.0
         else:
             self.policy_default = 0.0
 
         self.device = device
+        self.roots = {}
+
+    def reset_tree(self, batch_idx):
+        self.roots[batch_idx] = MCTSNode()
+
+    def update_root(self, batch_idx, action_idx):
+        if batch_idx not in self.roots:
+            return
+            
+        root = self.roots[batch_idx]
+        if action_idx in root.children:
+            self.roots[batch_idx] = root.children[action_idx]
+            self.roots[batch_idx].parent = None 
+        else:
+            self.roots[batch_idx] = MCTSNode()
+
 
     def search_batch(self, boards):
         """
@@ -32,22 +48,28 @@ class BatchedMCTS:
         
         batch_size = len(boards)
 
-        roots = [MCTSNode() for _ in range(batch_size)]
+        for i in range(batch_size):
+            if boards[i] is not None and i not in self.roots:
+                self.roots[i] = MCTSNode()
 
-        for _ in range(self.num_simulations):
+        while True:
+            active_indices = []
             
+            for i in range(batch_size):
+                if boards[i] is not None and self.roots[i].visit_count < self.num_simulations:
+                    active_indices.append(i)
+                    
+            if not active_indices:
+                break
+
             leaf_nodes = []
             leaf_boards = []
             valid_indices = []  
             nn_inputs = []
 
-            for i in range(batch_size):
-
-                if boards[i] is None:
-                    continue
-
-                node = roots[i]
-                board = boards[i].clone() 
+            for i in active_indices:
+                node = self.roots[i]
+                board = boards[i].clone()
                 
                 while node.is_expanded and node.children:
                     action_idx, node = node.select_child(self.c_puct)
@@ -69,11 +91,24 @@ class BatchedMCTS:
             if not valid_indices:
                 continue
 
+
+            batch_legal_indices = []
+            for board in leaf_boards:
+                legal_moves = board.get_legal_moves()
+                batch_legal_indices.append([board.move_to_action_index(m) for m in legal_moves])
+
             input_batch = torch.stack(nn_inputs).to(self.device)
             
             with torch.no_grad():
                 logits, values = self.model(input_batch)
-            
+
+            if self.mask_illegal_moves:
+                illegal_mask = torch.ones_like(logits, dtype=torch.bool)
+                for j, legal_indices in enumerate(batch_legal_indices):
+                    if legal_indices:
+                        illegal_mask[j, legal_indices] = False
+                logits[illegal_mask] = -1.0e10
+
             probs_batch = torch.softmax(logits, dim=1).cpu().numpy()
 
             if self.model.wdl:
@@ -88,8 +123,7 @@ class BatchedMCTS:
                 node = leaf_nodes[j]
                 board = leaf_boards[j]
                 
-                legal_moves = board.get_legal_moves()
-                legal_indices = [board.move_to_action_index(m) for m in legal_moves]
+                legal_indices = batch_legal_indices[j]
                 
                 full_probs = probs_batch[j]
                 
@@ -107,11 +141,13 @@ class BatchedMCTS:
                 node.backpropagate(val)
 
         policies = []
-        for k, root in enumerate(roots):
+        for k in range(batch_size):
             
             if boards[k] is None:
                 policies.append(None)
                 continue
+
+            root = self.roots[k]
 
             probs = torch.full((1252,), self.policy_default, dtype=torch.float32)
 
