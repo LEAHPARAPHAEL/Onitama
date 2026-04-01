@@ -163,6 +163,9 @@ def tournament(args):
                     action_idx = torch.multinomial(policy, 1).item()
                     move = board.action_index_to_move(action_idx)
 
+                    mcts1.update_root(i, action_idx)
+                    mcts2.update_root(i, action_idx)
+
                     game_over = board.play_move(move)
 
                     if game_over:
@@ -182,6 +185,9 @@ def tournament(args):
 
                         boards[i] = None
                         indices_to_replace.append(i)
+
+                        mcts1.reset_tree(i)
+                        mcts2.reset_tree(i)
 
 
         tqdm.write(f'Match statistics :\n \

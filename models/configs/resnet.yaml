@@ -16,14 +16,14 @@ model:
 
 training:
   cards: "standard"
-  epochs: 3
+  epochs: 1
   checkpoints_per_epoch: 5
   tests_per_epoch: 5
   warmup_ratio: 5
   weight_decay: 0.0005
   batch_size: 64
   train_proportion: 0.9
-  include_old_gens: 5
+  include_old_gens: 10
   momentum: 0.9
   nesterov: true
   use_data_augmentation: false
@@ -37,14 +37,14 @@ data:
   max_positions_in_ram: 100000
 
 mcts:
-  simulations: 200
+  simulations: 100
   c_puct: 1.0
   lower_temperature_after : 10
   high_temperature: 1.0
   low_temperature: 0.0
 
 generations:
-  n_generations: 30
-  lr_breaks : [10, 25]
+  n_generations: 50
+  lr_breaks : [25, 45]
   lrs : [0.01, 0.001, 0.0001]
 
