@@ -434,6 +434,8 @@ def test(args):
         val_p_acc_correct = 0
         val_p_acc_total = 0
         val_batch_count = 0
+
+        val_wdl_to_mse = 0
         
         with torch.no_grad():
             for inputs, target_p, target_v in val_loader:
@@ -441,6 +443,11 @@ def test(args):
                 p_logits, v_pred = model(inputs)
                 l_p = policy_criterion(p_logits, target_p)
                 l_v = value_criterion(v_pred, target_v)
+
+                if wdl:
+                    v_pred_scalar = v_pred[:,2] - v_pred[:,1]
+                    l_scalar = MSEValueLoss(v_pred_scalar, target_v)
+                    val_wdl_to_mse += l_scalar.item()
                 val_loss_value += l_v.item()
                 val_loss_policy += l_p.item()
                 val_p_acc_correct += (p_logits.argmax(dim=-1) == target_p.argmax(dim=-1)).sum().item()
@@ -453,6 +460,8 @@ def test(args):
 
         tqdm.write(f"\nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f} | Acc : {avg_val_p_acc:.4f}")
         log[gen_key][str(steps)]["Val acc"] = avg_val_p_acc
+        if wdl:
+            log[gen_key][str(steps)]["Val MSE"] = val_wdl_to_mse
 
         json.dump(log, open(log_file, "w"), indent=4)
 
