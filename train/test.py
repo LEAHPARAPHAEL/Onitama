@@ -445,8 +445,9 @@ def test(args):
                 l_v = value_criterion(v_pred, target_v)
 
                 if wdl:
-                    v_pred_scalar = v_pred[:,2] - v_pred[:,1]
-                    l_scalar = MSEValueLoss(v_pred_scalar, target_v)
+                    v_probs = torch.softmax(v_pred, dim=-1)
+                    v_pred_scalar = v_probs[:,2] - v_probs[:,1]
+                    l_scalar = nn.MSELoss()(v_pred_scalar, target_v.view(-1))
                     val_wdl_to_mse += l_scalar.item()
                 val_loss_value += l_v.item()
                 val_loss_policy += l_p.item()
@@ -457,11 +458,15 @@ def test(args):
         avg_val_loss_policy = val_loss_policy / val_batch_count if val_batch_count > 0 else 0
         avg_val_loss_value = val_loss_value / val_batch_count if val_batch_count > 0 else 0
         avg_val_p_acc = val_p_acc_correct / val_p_acc_total if val_p_acc_total > 0 else 0
+        
+        if wdl:
+            avg_val_wdl_to_mse = val_wdl_to_mse / val_batch_count if val_batch_count > 0 else 0
+
 
         tqdm.write(f"\nPolicy : {avg_val_loss_policy:.4f} | Value : {avg_val_loss_value:.4f} | Acc : {avg_val_p_acc:.4f}")
         log[gen_key][str(steps)]["Val acc"] = avg_val_p_acc
         if wdl:
-            log[gen_key][str(steps)]["Val MSE"] = val_wdl_to_mse
+            log[gen_key][str(steps)]["Val MSE"] = avg_val_wdl_to_mse
 
         json.dump(log, open(log_file, "w"), indent=4)
 
