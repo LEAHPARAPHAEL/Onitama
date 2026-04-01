@@ -1,0 +1,7 @@
+logs: [
+  resnet_6_96.json,
+  se_net_6_96.json,
+  se_net_6_96_no_mask.json
+]
+
+out: plots/training_metrics.png
