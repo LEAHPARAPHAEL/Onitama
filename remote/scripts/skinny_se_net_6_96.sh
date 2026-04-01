@@ -16,4 +16,6 @@
 source .venv/bin/activate
 
 # Run the training script
+date +%Y%m%d%H%M%S
 python -m train.end_to_end -c skinny_se_net_6_96.yaml
+date +%Y%m%d%H%M%S
