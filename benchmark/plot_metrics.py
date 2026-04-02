@@ -26,7 +26,8 @@ def plot_json(args):
         pol_losses = []
         val_losses = []
         pol_accs = []
-
+        wdl_losses = []
+        
         for gen_key, gen_log in log.items():
             gens.append(int(gen_key.strip("v")))
 
@@ -34,13 +35,19 @@ def plot_json(args):
 
             last_step_log = gen_log[last_step_key]
 
-            pol_accs.append(last_step_log["Val acc"])
-            pol_losses.append(last_step_log["Val policy"])
-            val_losses.append(last_step_log["Val value"])
+            pol_accs.append(last_step_log["Validation Policy Accuracy"])
+            pol_losses.append(last_step_log["Validation Policy Loss"])
+            val_losses.append(last_step_log["Validation Value MSE"])
 
-        axes[0].plot(gens, pol_losses, color = color, marker = 'o', alpha = 0.7, label = model_name)
-        axes[1].plot(gens, val_losses, color = color, marker = 'o', alpha = 0.7, label = model_name)
-        axes[2].plot(gens, pol_accs, color = color, marker = 'o', alpha = 0.7, label = model_name)
+            if "Validation Value WDL" in last_step_log:
+                wdl_losses.append(last_step_log["Validation Value WDL"])
+
+        axes[0].plot(gens, pol_losses, color = color,label = model_name, linewidth = 2)
+        axes[1].plot(gens, val_losses, color = color, label = model_name, linewidth = 2)
+        axes[2].plot(gens, pol_accs, color = color, label = model_name, linewidth = 2)
+
+        if wdl_losses:
+            axes[1].plot(gens, val_losses, color = color, linestyle = '-.', linewidth = 2)
 
 
     axes[0].set_xlabel("Generation index")

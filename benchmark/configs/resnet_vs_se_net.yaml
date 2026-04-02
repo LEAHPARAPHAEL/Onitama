@@ -1,6 +1,0 @@
-logs: [
-  resnet_6_96.json,
-  se_net_6_96.json
-]
-
-out: plots/resnet_vs_se_net.png

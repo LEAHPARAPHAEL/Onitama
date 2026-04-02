@@ -1,0 +1,19 @@
+tournament:
+  name: "aug_mask_100.yaml"
+  max_nodes: 100
+  rounds: 1000
+  batch_size: 64
+  cards: standard
+
+models:
+  resnet_aug:
+    config: "resnet_aug.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  resnet_aug_mask: 
+    config: "resnet_aug_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1

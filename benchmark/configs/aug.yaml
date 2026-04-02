@@ -1,0 +1,6 @@
+logs: [
+  resnet.json,
+  resnet_aug.json,
+]
+
+out: plots/aug.png
