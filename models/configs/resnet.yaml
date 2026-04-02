@@ -44,7 +44,6 @@ mcts:
   low_temperature: 0.0
 
 generations:
-  n_generations: 200
-  lr_breaks : [100]
-  lrs : [0.01, 0.01]
-
+  n_generations: 100
+  lr_breaks : []
+  lrs : [0.01]
