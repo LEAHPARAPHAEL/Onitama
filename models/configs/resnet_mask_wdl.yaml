@@ -1,0 +1,49 @@
+model:
+  name: "resnet_mask_wdl"
+  num_res_blocks: 6 
+  num_channels: 96        
+  input_planes: 9        
+  board_size: 5           
+  action_space_size: 1252
+  policy_head_channels : 32
+  value_head_channels : 32
+  value_head_hidden: 128
+  dropout: 0.0
+  wdl : true
+  use_se: false
+  se_factor: 2
+
+training:
+  cards: "standard"
+  epochs: 0.2
+  checkpoints_per_epoch: 1
+  tests_per_epoch: 1
+  warmup_ratio: 5
+  weight_decay: 0.0005
+  batch_size: 64
+  train_proportion: 0.9
+  include_old_gens: 10
+  keep_latest: 10
+  momentum: 0.9
+  nesterov: true
+  use_data_augmentation: false
+  mask_illegal_moves: true
+  train_workers: 2
+  val_workers: 2
+
+data:
+  total_positions: 20000
+  positions_per_shard: 10000
+  max_positions_in_ram: 100000
+
+mcts:
+  simulations: 100
+  c_puct: 1.0
+  lower_temperature_after : 10
+  high_temperature: 1.0
+  low_temperature: 0.0
+
+generations:
+  n_generations: 100
+  lr_breaks : []
+  lrs : [0.01]
