@@ -328,6 +328,7 @@ def train(args):
     tests_per_epoch = train_config.get('tests_per_epoch', 10)
     checkpoints_per_epoch = train_config.get('checkpoints_per_epoch', 10)
     include_old_gens = train_config.get('include_old_gens', 5)
+    keep_latest = train_config.get('keep_latest', 10)
     momentum = train_config.get("momentum", 0.9)
     nesterov = train_config.get("nesterov", True)
     use_data_augmentation = train_config.get("use_data_augmentation", False)
@@ -611,6 +612,9 @@ def train(args):
     pbar.close()
 
     remove_buffer(data_dir)
+    remove_old_gens(model_dir, newest_data_gen_idx, keep_latest)
+
+
 
 def remove_buffer(data_dir):
     if os.path.exists(os.path.join(data_dir, "buffer")):
@@ -620,6 +624,11 @@ def remove_buffer(data_dir):
 def remove_old_models(model_dir, gen_idx):
     for model_file in os.listdir(model_dir):
         if extract_gen_idx(model_file) == gen_idx:
+            os.remove(os.path.join(model_dir, model_file))
+
+def remove_old_gens(model_dir, gen_idx, keep_latest):
+    for model_file in os.listdir(model_dir):
+        if extract_gen_idx(model_file) <= gen_idx - keep_latest:
             os.remove(os.path.join(model_dir, model_file))
 
 

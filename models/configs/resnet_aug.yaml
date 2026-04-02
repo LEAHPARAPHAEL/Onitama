@@ -1,5 +1,5 @@
 model:
-  name: "resnet"
+  name: "resnet_aug"
   num_res_blocks: 6 
   num_channels: 96        
   input_planes: 9        
@@ -26,7 +26,7 @@ training:
   keep_latest: 10
   momentum: 0.9
   nesterov: true
-  use_data_augmentation: false
+  use_data_augmentation: true
   mask_illegal_moves: false
   train_workers: 2
   val_workers: 2

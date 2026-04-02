@@ -34,12 +34,10 @@ def generate(args):
     data_config = config["data"]
     positions_per_shard = data_config.get("positions_per_shard", 5000)
     total_positions = data_config.get("total_positions", 50000)
-    include_old_gens = config["training"].get("include_old_gens", 5)
+    include_old_gens = config["training"].get("include_old_gens", 10)
     batch_size = data_config.get("batch_size", 64)
     mask_illegal_moves = config["training"].get("mask_illegal_moves", False)
     cards = config["training"].get("cards", "standard")
-
-    required_shards = total_positions // positions_per_shard
 
     # Load the model :
     model = OnitamaNet(config).to(device)
@@ -173,108 +171,17 @@ def generate(args):
                     
                     saved_positions += max_positions
                     if positions >= total_positions:
+                        remove_old_gens(data_dir, gen, include_old_gens)
                         return
+        
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    game_histories = [[] for _ in range(batch_size)]
-
-    positions = new_shard_idx * positions_per_shard
-
-    pbar = tqdm(desc=f"v{gen} generation", total = total_positions)
-    pbar.update(positions)
-    while positions < total_positions:
-
-        policies = batched_mcts.search_batch(boards)
-        for i in range(batch_size):
-            board = boards[i]
-            policy = policies[i]
-            
-            game_histories[i].append((
-                board.get_compact_board(), 
-                policy.clone(), 
-                board.turn
-            ))
-
-            if mask_illegal_moves:
-                policy = F.relu(policy)
-            action_idx = torch.multinomial(policy, 1).item()
-            move = board.action_index_to_move(action_idx)
-
-            game_over = board.play_move(move)
-
-            if game_over:
-                result = board.get_result()
-                potential_loser = board.get_turn()
-
-                for compact_board, policy, turn in game_histories[i]:
-                    value_label = (result if potential_loser == turn else -result)
-                    data.append((compact_board, policy, value_label))
-                    positions += 1
-                    pbar.update(1)
-
-                # Start a new game to replace the one that just finished
-                boards[i] = Board(get_5_random_cards())
-                
-                
-            while len(data) >= positions_per_shard:
-                torch.save(data[:positions_per_shard], data_path)
-                tqdm.write(f"\nSaving {positions_per_shard} positions to {data_path}.")
-                new_shard_idx += 1
-                data_path = os.path.join(data_newest_gen_dir, f"positions_{positions_per_shard}_{new_shard_idx}.pt")
-                data = data[positions_per_shard:]
-
-                if new_shard_idx == required_shards:
-                    pbar.close()
-                    remove_old_gens(data_dir, include_old_gens)
-                    return
-
-
-
-
-
-
-def remove_old_gens(data_dir, include_old_gens):
-    # Remove old data generations
-    sorted_data_dir = sorted(os.listdir(data_dir), key=lambda f : int(f.strip("v")))
-    if len(sorted_data_dir) > include_old_gens:
-        for old_data_gen_dir in sorted_data_dir[:-include_old_gens]:
-            print(old_data_gen_dir)
-            shutil.rmtree(os.path.join(data_dir, old_data_gen_dir))
+def remove_old_gens(data_dir, gen_idx, include_old_gens):
+    for data_gen_dir in os.listdir(data_dir):
+        if extract_gen_idx(data_gen_dir) < gen_idx - include_old_gens:
+            shutil.rmtree(os.path.join(data_dir, data_gen_dir))
 
 
 

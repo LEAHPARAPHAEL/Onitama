@@ -388,6 +388,12 @@ class OnitamaGUI:
                         move = Move(self.selected_piece_idx, logic_idx, self.selected_card_slot)
                         self.board.play_move(move)
                         self.reset_selection()
+
+                        if self.model_manager.agent.active_model is not None:
+                            self.model_manager.agent.active_mcts.update_root(0, self.board.move_to_action_index(move))
+
+
+                        
     
     def update_valid_moves(self):
         if self.selected_card_slot is None or self.selected_piece_idx is None:
@@ -511,6 +517,9 @@ class OnitamaGUI:
             if pygame.Rect(bx, by, btn_w, btn_h).collidepoint(event.pos):
                 self.state = "MENU"
                 self.board = None # Reset board
+                if self.model_manager.agent.active_model is not None:
+                    self.model_manager.agent.active_mcts.reset_tree(0)
+
 
 
     def draw_gameover(self):
@@ -730,6 +739,10 @@ class OnitamaGUI:
 
         # 4. Play
         self.board.play_move(move)
+
+        if self.model_manager.agent.active_model is not None:
+            self.model_manager.agent.active_mcts.update_root(0, self.board.move_to_action_index(move))
+
 
 if __name__ == "__main__":
     gui = OnitamaGUI()
