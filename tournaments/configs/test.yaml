@@ -1,0 +1,19 @@
+tournament:
+  name: "test.yaml"
+  max_nodes: 100
+  rounds: 500
+  batch_size: 64
+  cards: standard
+
+models:
+  senet_aug_wdl:
+    config: "senet_aug_wdl.yaml"
+    start_gen: 82
+    end_gen: 82
+    step_gen: 1
+    
+  resnet_aug_mask: 
+    config: "resnet_aug_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1

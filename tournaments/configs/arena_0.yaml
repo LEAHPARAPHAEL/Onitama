@@ -1,0 +1,103 @@
+tournament:
+  name: "arena_0"
+  max_nodes: 2
+  rounds: 500
+  batch_size: 64
+  cards: standard
+
+models:
+  resnet:
+    config: "resnet.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  resnet_aug: 
+    config: "resnet_aug.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  resnet_aug_mask:
+    config: "resnet_aug_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  resnet_aug_wdl: 
+    config: "resnet_aug_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  resnet_aug_mask_wdl:
+    config: "resnet_aug_mask_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  resnet_mask: 
+    config: "resnet_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  resnet_mask_wdl:
+    config: "resnet_mask_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  resnet_wdl: 
+    config: "resnet_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+  
+  senet:
+    config: "senet.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  senet_aug: 
+    config: "senet_aug.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  senet_aug_mask:
+    config: "senet_aug_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  senet_aug_wdl: 
+    config: "senet_aug_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  senet_aug_mask_wdl:
+    config: "senet_aug_mask_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  senet_mask: 
+    config: "senet_mask.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  senet_mask_wdl:
+    config: "senet_mask_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  senet_wdl: 
+    config: "senet_wdl.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
