@@ -36,7 +36,7 @@ def run_benchmark(args):
 
     mcts = BatchedMCTS(model, config, device)
 
-    mcts.num_simulations = 400
+    mcts.num_simulations = 100
 
     pbar = tqdm(desc="Running batch_size VS time benchmark", total = len(batch_sizes) * n_runs)
     for batch_size in batch_sizes:
@@ -58,17 +58,23 @@ def run_benchmark(args):
 
             results_batched[r] = total_time
 
+            for i in range(batch_size):
+                mcts.reset_tree(i)
+
 
             # Bench unbatched boards
             start = time.time()
 
             for board in boards:
                 _ = mcts.search_batch([board])[0]
+                mcts.reset_tree(0)
 
             total_time = time.time() - start
 
             results_unbatched[r] = total_time
 
+            for i in range(batch_size):
+                mcts.reset_tree(i)
 
 
 
