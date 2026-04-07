@@ -1,0 +1,8 @@
+logs: [
+  resnet.json,
+  resnet_aug.json,
+  resnet_mask.json,
+  resnet_wdl.json
+]
+
+out: plots/resnet.png

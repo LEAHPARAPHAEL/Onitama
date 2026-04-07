@@ -16,7 +16,7 @@ def plot_json(args):
 
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'gray', 'cyan', 'black', 'yellow'][:len(log_files)]
 
-    fig, axes = plt.subplots(nrows = 1, ncols = 3, figsize = (15, 4))
+    fig, axes = plt.subplots(nrows = 3, ncols = 1, figsize = (7, 15))
     axes = axes.flatten()
 
     for log_file, color in zip(log_files, colors):
@@ -39,23 +39,23 @@ def plot_json(args):
             pol_losses.append(last_step_log["Validation Policy Loss"])
             val_losses.append(last_step_log["Validation Value MSE"])
 
-            if "Validation Value WDL" in last_step_log:
-                wdl_losses.append(last_step_log["Validation Value WDL"])
+            #if "Validation Value WDL" in last_step_log:
+            #    wdl_losses.append(last_step_log["Validation Value WDL"])
 
         axes[0].plot(gens, pol_losses, color = color,label = model_name, linewidth = 2)
         axes[1].plot(gens, val_losses, color = color, label = model_name, linewidth = 2)
         axes[2].plot(gens, pol_accs, color = color, label = model_name, linewidth = 2)
 
-        if wdl_losses:
-            axes[1].plot(gens, val_losses, color = color, linestyle = '-.', linewidth = 2)
+        #if wdl_losses:
+        #    axes[1].plot(gens, val_losses, color = color, linestyle = '-.', linewidth = 2)
 
 
-    axes[0].set_xlabel("Generation index")
+    #axes[0].set_xlabel("Generation index")
     axes[0].set_ylabel("Policy Loss")
     axes[0].grid(True, alpha = 0.7)
     axes[0].legend()
     
-    axes[1].set_xlabel("Generation index")
+    #axes[1].set_xlabel("Generation index")
     axes[1].set_ylabel("Value Loss")
     axes[1].grid(True, alpha = 0.7)
     axes[1].legend()

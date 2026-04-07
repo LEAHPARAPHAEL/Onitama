@@ -196,6 +196,12 @@ def tournament(args):
         
         json.dump(log, open(log_file, "w"), indent=4)
 
+        del model1
+        del model2
+        del mcts1
+        del mcts2
+        torch.cuda.empty_cache()
+
     pbar.close()
 
 

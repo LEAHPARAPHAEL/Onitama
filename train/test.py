@@ -316,6 +316,14 @@ def test(args):
 
     config = yaml.safe_load(open(os.path.join("models", "configs", args.config), "r"))
 
+    # Load the model :
+    model = OnitamaNet(config).to(device)
+
+    total_params = sum(p.numel() for p in model.parameters())
+
+    print(total_params)
+    sys.exit(0)
+
     model_name = config["model"]["name"]
     model_dir = os.path.join("models", "weights", model_name)
     data_dir = os.path.join("models", "data", model_name)
@@ -378,9 +386,6 @@ def test(args):
 
         gen_key = f"v{gen}"
 
-
-        # Load the model :
-        model = OnitamaNet(config).to(device)
 
         with gzip.open(os.path.join(model_dir, model_file), "rb") as f:
             save_dict = torch.load(f, weights_only = False)

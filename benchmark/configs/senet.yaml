@@ -1,0 +1,8 @@
+logs: [
+  senet.json,
+  senet_aug.json,
+  senet_mask.json,
+  senet_wdl.json
+]
+
+out: plots/senet.png

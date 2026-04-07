@@ -30,7 +30,7 @@ def run_benchmark(args):
     log = {}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    config = yaml.safe_load(open(os.path.join("models", "configs", "resnet_6_96.yaml"), "r"))
+    config = yaml.safe_load(open(os.path.join("models", "configs", "resnet.yaml"), "r"))
 
     model = OnitamaNet(config).to(device)
 

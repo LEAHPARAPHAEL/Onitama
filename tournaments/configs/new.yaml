@@ -1,0 +1,26 @@
+tournament:
+  name: "new"
+  max_nodes: 100
+  rounds: 500
+  batch_size: 64
+  cards: new
+
+models:
+  senet:
+    config: "senet.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
+  senet_new: 
+    config: "senet_new.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+
+  senet_all:
+    config: "senet_all.yaml"
+    start_gen: 100
+    end_gen: 100
+    step_gen: 1
+    
