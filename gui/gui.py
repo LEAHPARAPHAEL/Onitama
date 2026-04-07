@@ -156,13 +156,16 @@ class OnitamaGUI:
         self.ai_eval = 0.0 
         self.last_ai_move = None 
 
-        # Menu Data (Updated for 32 cards and 4 modes)
+        # Menu Data
         self.card_mode = "STANDARD" # Modes: "STANDARD", "EXTENSION", "ALL", "CUSTOM"
         self.menu_selected_model_idx = -1
-        self.menu_card_assignments = {i: None for i in range(32)} # Expanded to 32
+        self.menu_card_assignments = {i: None for i in range(32)}
         self.menu_mcts_sims = 800
         self.slider_dragging = False
         self.slider_rect = pygame.Rect(330, 430, 165, 16) 
+        
+        # Scroll tracking for model list
+        self.model_scroll_y = 0 
         
         # Game Data
         self.selected_card_slot = None
@@ -177,7 +180,11 @@ class OnitamaGUI:
         # TODO: Implement actual network inference here
         # For now, return a random value between -1 (Loss) and 1 (Win)
         if self.model_manager.agent.active_model is not None:
-            value = self.model_manager.agent.active_model(get_nn_input(board).unsqueeze(0).to(self.model_manager.agent.device))[1].item()
+            if self.model_manager.agent.active_model.wdl:
+                probs = self.model_manager.agent.active_model(get_nn_input(board).unsqueeze(0).to(self.model_manager.agent.device))[1]
+                value = probs[0,2] - probs[0,0]
+            else:
+                value = self.model_manager.agent.active_model(get_nn_input(board).unsqueeze(0).to(self.model_manager.agent.device))[1].item()
         else:
             value = 0.0
         return value
@@ -592,6 +599,16 @@ class OnitamaGUI:
         if event.type == pygame.MOUSEBUTTONUP:
             self.slider_dragging = False; return
 
+        # Handle mouse wheel scrolling for the model list
+        if event.type == pygame.MOUSEWHEEL:
+            pos = pygame.mouse.get_pos()
+            if pygame.Rect(R_PANEL_X, PANEL_Y, 250, 330).collidepoint(pos):
+                self.model_scroll_y -= event.y * 20 # Scroll speed
+                # Clamp scrolling to the list bounds
+                max_scroll = max(0, len(self.model_manager.available_models) * 32 - 330)
+                self.model_scroll_y = max(0, min(self.model_scroll_y, max_scroll))
+            return
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
             
@@ -613,12 +630,11 @@ class OnitamaGUI:
             if pygame.Rect(L_CX - 82, PANEL_Y + 107, 164, 32).collidepoint(pos):
                 modes = ["STANDARD", "EXTENSION", "ALL", "CUSTOM"]
                 self.card_mode = modes[(modes.index(self.card_mode) + 1) % 4]
-                # Reset assignments if changing away from custom
                 if self.card_mode != "CUSTOM": 
                     self.menu_card_assignments = {i: None for i in range(32)}
                 return
 
-            # 4. Card Grid (Now 32 cards: 4 cols x 8 rows)
+            # 4. Card Grid
             if self.card_mode == "CUSTOM":
                 start_x = L_CX - 180
                 start_y = PANEL_Y + 156
@@ -631,7 +647,9 @@ class OnitamaGUI:
             # --- RIGHT PANEL MODELS & START ---
             # 5. Model List
             if pygame.Rect(R_PANEL_X, PANEL_Y, 250, 330).collidepoint(pos):
-                idx = (pos[1] - PANEL_Y) // 32
+                # Adjust Y coordinate by scroll offset
+                click_y = pos[1] - PANEL_Y + self.model_scroll_y
+                idx = click_y // 32
                 if 0 <= idx < len(self.model_manager.available_models):
                     self.menu_selected_model_idx = idx
                 return
@@ -683,7 +701,7 @@ class OnitamaGUI:
         m_surf = self.bold_font.render(m_lbl, True, C_TEXT)
         self.screen.blit(m_surf, m_surf.get_rect(center=mode_rect.center))
 
-        # 4. Card Grid (32 cards, compact layout)
+        # 4. Card Grid
         if self.card_mode == "CUSTOM":
             start_x = L_CX - 180
             start_y = PANEL_Y + 156
@@ -695,7 +713,6 @@ class OnitamaGUI:
                 pygame.draw.rect(self.screen, bg, (cx,cy,82,35), border_radius=4)
                 pygame.draw.rect(self.screen, (100,100,100), (cx,cy,82,35), 1, border_radius=4)
                 
-                # Fetching from ALL_CARDS
                 c_name = ALL_CARDS[i]['name']
                 if len(c_name) > 10: c_name = c_name[:9] + "."
                 self.screen.blit(self.font.render(c_name, True, C_TEXT), (cx+4, cy+10))
@@ -706,17 +723,31 @@ class OnitamaGUI:
         mod_title = self.bold_font.render("Choose your opponent", True, C_TEXT)
         self.screen.blit(mod_title, (R_PANEL_X, PANEL_Y - 24))
 
-        # Model List
-        pygame.draw.rect(self.screen, (230,230,230), (R_PANEL_X, PANEL_Y, R_PANEL_W, 330))
-        pygame.draw.rect(self.screen, (0,0,0), (R_PANEL_X, PANEL_Y, R_PANEL_W, 330), 2)
+        # Model List Background
+        list_rect = pygame.Rect(R_PANEL_X, PANEL_Y, R_PANEL_W, 330)
+        pygame.draw.rect(self.screen, (230,230,230), list_rect)
+        
+        # Set clip rectangle to hide items scrolled out of bounds
+        self.screen.set_clip(list_rect)
+
         for i, m in enumerate(self.model_manager.available_models):
-            y = PANEL_Y + i*32
-            # Ensure we don't draw outside the box
-            if y + 32 > PANEL_Y + 330: break 
+            # Apply scroll offset to Y coordinate
+            y = PANEL_Y + i * 32 - self.model_scroll_y
+            
+            # Culling: Only draw visible items
+            if y + 32 < PANEL_Y or y > PANEL_Y + 330:
+                continue
+                
             col = (180,220,255) if i == self.menu_selected_model_idx else (255,255,255)
             pygame.draw.rect(self.screen, col, (R_PANEL_X, y, R_PANEL_W, 32))
             pygame.draw.rect(self.screen, (200,200,200), (R_PANEL_X, y, R_PANEL_W, 32), 1)
             self.screen.blit(self.font.render(m.get('name','?'), True, C_TEXT), (R_PANEL_X + 8, y+8))
+
+        # Reset clipping rectangle
+        self.screen.set_clip(None)
+        
+        # Draw the bounding box on top so it overrides scrolled contents
+        pygame.draw.rect(self.screen, (0,0,0), list_rect, 2)
 
         # 5. Start Button
         can = self.can_start_game()

@@ -16,7 +16,7 @@ def plot_json(args):
 
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'gray', 'cyan', 'black', 'yellow'][:len(log_files)]
 
-    fig, axes = plt.subplots(nrows = 3, ncols = 1, figsize = (7, 15))
+    fig, axes = plt.subplots(nrows = 1, ncols = 3, figsize = (15, 4))
     axes = axes.flatten()
 
     for log_file, color in zip(log_files, colors):
@@ -50,12 +50,12 @@ def plot_json(args):
         #    axes[1].plot(gens, val_losses, color = color, linestyle = '-.', linewidth = 2)
 
 
-    #axes[0].set_xlabel("Generation index")
+    axes[0].set_xlabel("Generation index")
     axes[0].set_ylabel("Policy Loss")
     axes[0].grid(True, alpha = 0.7)
     axes[0].legend()
     
-    #axes[1].set_xlabel("Generation index")
+    axes[1].set_xlabel("Generation index")
     axes[1].set_ylabel("Value Loss")
     axes[1].grid(True, alpha = 0.7)
     axes[1].legend()
@@ -73,7 +73,7 @@ def plot_json(args):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Number of simulations VS time")
-    parser.add_argument("--config", "-c", type = str, default = "training_metrics.yaml", 
+    parser.add_argument("--config", "-c", type = str, default = "all.yaml", 
                         help = "path to the config file")
     
     args = parser.parse_args()

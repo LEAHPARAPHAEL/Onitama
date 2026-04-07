@@ -14,7 +14,7 @@ The code is organized into 7 main modules :
 To train a new model, you need to write the configuration file in the models/configs directory. The model name should be specified, as well as all the desired options. The other configurations can serve as examples to show the list of tunable parameters.
 Then, once a my_model.yaml configuration file is accessible, you can launch the training of the model with the command :
 
-python -m train.end_to_end -c my_model.yaml
+    python -m train.end_to_end -c my_model.yaml
 
 The logs of each step of this training will be available in models/logs/my_model.json. 
 
@@ -22,7 +22,7 @@ The logs of each step of this training will be available in models/logs/my_model
 
 To play against our models, run the command :
 
-python -m gui.gui
+    python -m gui.gui
 
 Then, select your opponent in the list of available models on the right. On the left, choose the number of simulations, and the starting state of the game. You can choose the 5 starting cards, or pick a random set of 5 cards from the original game, the extension Sensei's Path, or both. Click "START" when you are ready to play.
 
